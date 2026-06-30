@@ -1,13 +1,13 @@
 Mplus VERSION 8.3
 MUTHEN & MUTHEN
-06/28/2026   2:39 AM
+06/30/2026   7:28 PM
 
 INPUT INSTRUCTIONS
 
   TITLE:
   CFA - 4 factors
   DATA:
-  FILE = "veri.dat";
+  FILE = "data.dat";
   VARIABLE:
   NAMES ARE M1 M2 M3 M4 M5 M6 M7 M8 M9 M10 M11 M12 M13 M14 M15 M16 M17 M18 M19 M20 M21
     M22 M23 M24 GRP;
@@ -61,7 +61,7 @@ Convergence criterion                                    0.500D-04
 Maximum number of steepest descent iterations                   20
 
 Input data file(s)
-  veri.dat
+  data.dat
 
 Input data format  FREE
 
@@ -2345,9 +2345,9 @@ TECHNICAL 4 OUTPUT
  F4             0.000         0.041         0.003         0.000
 
 
-     Beginning Time:  02:39:32
-        Ending Time:  02:39:33
-       Elapsed Time:  00:00:01
+     Beginning Time:  19:28:16
+        Ending Time:  19:28:16
+       Elapsed Time:  00:00:00
 
 
 

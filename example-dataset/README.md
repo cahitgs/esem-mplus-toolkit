@@ -1,4 +1,4 @@
-# Example dataset — `veri.dat`
+# Example dataset — `data.dat`
 
 A **fully synthetic** dataset generated for testing the toolkit. No real participants.
 
@@ -28,4 +28,4 @@ prose, and path diagrams.
 2. Drop `2_ESEM_geomin.out` → fit row, standardized loadings, diagram, and an
    **ESEM-within-CFA** card (because that `.out` carries a SVALUES block).
 3. Drop all `inv_*.out` together → an invariance table with ΔCFI / ΔRMSEA verdicts.
-4. To build syntax from scratch: **Data** → `veri.dat` → **Model** (4 factors, M1–M6→F1 … M19–M24→F4).
+4. To build syntax from scratch: **Data** → `data.dat` → **Model** (4 factors, M1–M6→F1 … M19–M24→F4).

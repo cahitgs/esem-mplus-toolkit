@@ -520,10 +520,10 @@ async function demoBootstrap(which) {
   // builder and the generated syntax are shown on the same 24-item / 4-factor example.
   if (which === 'model' || which === 'syntax') {
     try {
-      const text = await fetch('example-dataset/veri.dat').then((r) => r.text());
-      const data = parseDataFile(text, 'veri.dat');
+      const text = await fetch('example-dataset/data.dat').then((r) => r.text());
+      const data = parseDataFile(text, 'data.dat');
       data.varNames = Array.from({ length: 24 }, (_, i) => 'M' + (i + 1)).concat('GRP');
-      data.mplusFile = 'veri.dat';
+      data.mplusFile = 'data.dat';
       appState.data = data;
       const spec = createModelSpec(data);
       spec.items = data.varNames.slice(0, 24);
