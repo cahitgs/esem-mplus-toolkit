@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Simple Structure — ESEM workbench for Mplus</title>
+<meta name="description" content="Build Mplus ESEM syntax from a model you sketch, run it locally, then turn the output into journal-ready APA tables and text." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper: '#EBEEEC', surface: '#FBFCFB',
+          ink: '#14201C', 'ink-soft': '#43524C', 'ink-faint': '#7B8A83',
+          line: '#D6DCD8',
+          petrol: '#0E5C5B', 'petrol-deep': '#0A403F', 'petrol-bright': '#16807D',
+          ochre: '#C8772E', 'ochre-soft': '#E0A458',
+        },
+        fontFamily: {
+          display: ['Space Grotesk', 'sans-serif'],
+          body: ['IBM Plex Sans', 'sans-serif'],
+          serif: ['Spectral', 'serif'],
+          mono: ['JetBrains Mono', 'monospace'],
+        },
+        maxWidth: { content: '1180px' },
+      },
+    },
+  };
+</script>
+<link rel="stylesheet" href="css/app.css" />
+
+<!-- Client-side export libs (UMD globals: docx, JSZip) -->
+<script defer src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+
+<body class="font-body">
+<div id="app">
+
+  <!-- ============ Header ============ -->
+  <header class="sticky top-0 z-40 no-print" style="backdrop-filter: blur(10px); background: color-mix(in srgb, var(--paper) 78%, transparent); border-bottom: 1px solid var(--line);">
+    <div class="mx-auto max-w-content px-5 md:px-8">
+      <div class="flex items-center justify-between py-3">
+        <a href="./" class="flex items-center gap-3 group" style="text-decoration:none;color:inherit">
+          <span class="lam-mark">λ</span>
+          <span class="leading-none">
+            <span class="font-display block text-[1.18rem] font-semibold tracking-tight text-ink">Simple Structure</span>
+            <span class="block text-[0.72rem] text-ink-faint" style="letter-spacing:.04em">ESEM workbench for Mplus</span>
+          </span>
+        </a>
+        <div class="hidden sm:flex items-center gap-2">
+          <span class="chip">Λ&nbsp; loading matrix</span>
+          <span class="chip" style="background:var(--ochre-tint);color:#9A551C;border-color:color-mix(in srgb,var(--ochre) 30%,transparent)">APA&nbsp;→&nbsp;Word</span>
+        </div>
+      </div>
+
+      <!-- ============ Stepper ============ -->
+      <nav class="stepper pb-3" aria-label="Workflow steps" id="stepper">
+        <button class="step" data-step="data" aria-current="step">
+          <span class="step-badge">1</span>
+          <span class="step-label"><span class="t">Data</span><span class="s">load &amp; name variables</span></span>
+        </button>
+        <span class="step-rail"></span>
+        <button class="step" data-step="model" disabled>
+          <span class="step-badge">2</span>
+          <span class="step-label"><span class="t">Model</span><span class="s">factors &amp; rotation</span></span>
+        </button>
+        <span class="step-rail"></span>
+        <button class="step" data-step="syntax" disabled>
+          <span class="step-badge">3</span>
+          <span class="step-label"><span class="t">Syntax</span><span class="s">generate .inp</span></span>
+        </button>
+        <span class="step-rail"></span>
+        <button class="step" data-step="results" disabled>
+          <span class="step-badge">4</span>
+          <span class="step-label"><span class="t">Results</span><span class="s">read .out → APA</span></span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ============ Main ============ -->
+  <main class="mx-auto max-w-content px-5 md:px-8 py-8 md:py-12">
+
+    <!-- ---- Step 1 · Data (intake / thesis) ---- -->
+    <section id="step-data" class="step-panel" data-panel="data">
+      <div id="data-intake" class="grid lg:grid-cols-[1.05fr_0.95fr] gap-10 lg:gap-14 items-center">
+        <div>
+          <p class="eyebrow mb-4">Exploratory Structural Equation Modeling</p>
+          <h1 class="display-xl text-ink mb-5">Find the<br>simple structure.</h1>
+          <p class="lede mb-7" style="max-width:46ch">
+            Sketch a factor model, and this workbench writes correct Mplus <span class="font-mono text-[0.95em]" style="color:var(--petrol)">.inp</span>
+            syntax — ESEM, CFA, or bifactor. Run it in your own Mplus, drop the
+            <span class="font-mono text-[0.95em]" style="color:var(--petrol)">.out</span> back, and read it as journal-ready APA tables and text.
+          </p>
+
+          <!-- Dropzone -->
+          <div class="dropzone" id="data-dropzone" role="button" tabindex="0" aria-label="Upload a data file">
+            <input type="file" id="data-file-input" accept=".dat,.csv,.txt" hidden />
+            <div class="flex flex-col items-center gap-2">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color:var(--petrol)"><path d="M12 16V4m0 0L8 8m4-4 4 4" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round"/></svg>
+              <p class="font-display font-semibold text-ink text-[1.02rem]">Drop your data file here</p>
+              <p class="text-[0.86rem] text-ink-faint">Mplus <span class="font-mono">.dat</span> or <span class="font-mono">.csv</span> — read in your browser, never uploaded</p>
+              <button type="button" class="btn btn-ghost mt-2" id="data-browse-btn">Choose file</button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-2 mt-6">
+            <span class="chip" style="background:var(--surface);color:var(--ink-soft);border-color:var(--line)">CFA · ESEM · Bifactor</span>
+            <span class="chip" style="background:var(--surface);color:var(--ink-soft);border-color:var(--line)">Geomin &amp; Target rotation</span>
+            <span class="chip" style="background:var(--surface);color:var(--ink-soft);border-color:var(--line)">Measurement invariance</span>
+          </div>
+          <p class="mt-5 text-[0.86rem]" style="color:var(--ink-faint)">
+            Already have Mplus output?
+            <button id="skip-to-results" class="font-semibold" style="color:var(--petrol);text-decoration:underline;text-underline-offset:3px;cursor:pointer;background:none;border:none;font-size:inherit">Skip to reading .out files →</button>
+          </p>
+        </div>
+
+        <!-- Ambient Λ matrix — the signature, illustrating the loading matrix -->
+        <div class="surface p-6 md:p-7" aria-hidden="true">
+          <div class="flex items-center justify-between mb-4">
+            <span class="eyebrow">Λ&nbsp;&nbsp;loading matrix</span>
+            <span class="text-[0.72rem] font-mono text-ink-faint">ESEM · 3 factors</span>
+          </div>
+          <div class="lam-amb">
+            <div style="display:grid;grid-template-columns:2.4rem repeat(3,1fr);gap:6px;align-items:center">
+              <div></div>
+              <div class="text-center font-mono text-[0.74rem]" style="color:var(--petrol)">F1</div>
+              <div class="text-center font-mono text-[0.74rem]" style="color:var(--petrol)">F2</div>
+              <div class="text-center font-mono text-[0.74rem]" style="color:var(--petrol)">F3</div>
+              <!-- rows injected here by the markup below -->
+              <div class="font-mono text-[0.72rem] text-ink-faint">X1</div>
+              <div class="lam-cell" aria-pressed="true"><span class="dot"></span></div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+
+              <div class="font-mono text-[0.72rem] text-ink-faint">X2</div>
+              <div class="lam-cell" aria-pressed="true"><span class="dot"></span></div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+
+              <div class="font-mono text-[0.72rem] text-ink-faint">X3</div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+              <div class="lam-cell" aria-pressed="true"><span class="dot"></span></div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+
+              <div class="font-mono text-[0.72rem] text-ink-faint">X4</div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+              <div class="lam-cell" aria-pressed="true"><span class="dot"></span></div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+
+              <div class="font-mono text-[0.72rem] text-ink-faint">X5</div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+              <div class="lam-cell" aria-pressed="true"><span class="dot"></span></div>
+
+              <div class="font-mono text-[0.72rem] text-ink-faint">X6</div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+              <div class="lam-cell cross"><span class="dot"></span></div>
+              <div class="lam-cell" aria-pressed="true"><span class="dot"></span></div>
+            </div>
+          </div>
+          <div class="flex items-center gap-4 mt-5 text-[0.74rem]" style="color:var(--ink-soft)">
+            <span class="inline-flex items-center gap-1.5"><span style="width:12px;height:12px;border-radius:4px;background:linear-gradient(155deg,var(--ochre-soft),var(--ochre));display:inline-block"></span> target loading</span>
+            <span class="inline-flex items-center gap-1.5"><span style="width:12px;height:12px;border-radius:4px;background:var(--petrol-tint);border:1px solid color-mix(in srgb,var(--petrol) 16%,transparent);display:inline-block"></span> free cross-loading</span>
+          </div>
+        </div>
+      </div>
+      <div id="data-review" hidden></div>
+    </section>
+
+    <!-- ---- Step 2 · Model ---- -->
+    <section id="step-model" class="step-panel" data-panel="model" hidden>
+      <div id="model-host"></div>
+    </section>
+
+    <!-- ---- Step 3 · Syntax ---- -->
+    <section id="step-syntax" class="step-panel" data-panel="syntax" hidden>
+      <div id="syntax-host"></div>
+    </section>
+
+    <!-- ---- Step 4 · Results ---- -->
+    <section id="step-results" class="step-panel" data-panel="results" hidden>
+      <div id="results-host"></div>
+    </section>
+
+  </main>
+
+  <footer class="no-print mx-auto max-w-content px-5 md:px-8 pb-10 pt-2">
+    <p class="text-[0.78rem] text-ink-faint" style="line-height:1.6">
+      Generates Mplus input and reads Mplus output — it does not run Mplus. Your data and output files stay in this browser.
+      Table format follows Swami, Maïano &amp; Morin (2023), <span class="font-serif italic">A guide to ESEM and bifactor-ESEM</span>.
+    </p>
+  </footer>
+
+  <div id="toast-host" aria-live="polite"></div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

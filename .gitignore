@@ -1,0 +1,26 @@
+# Copyrighted / third-party material (never publish)
+*.pdf
+*.docx
+1-s2.0-*
+WebPaper1.pdf
+ESEM-Kuram-vs-Uygulama.pdf
+_doc.html
+
+# Local / personal notes & data not for distribution
+# CLAUDE.md has machine-specific paths; deneme/ bundles Morin's freely-distributed
+# raw ESEM.dat (not ours to republish); curated screenshots live in docs/img/.
+CLAUDE.md
+deneme/
+deneme-4faktor/
+temporary screenshots/
+
+# Dev-only helper scripts
+_gen4f.mjs
+_mkdoc.mjs
+topdf.mjs
+
+# Misc
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

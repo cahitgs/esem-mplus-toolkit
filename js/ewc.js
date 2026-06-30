@@ -1,0 +1,208 @@
+// ewc.js — ESEM-within-CFA (and bifactor-EWC) generation. Pure (no DOM); Node-testable.
+//
+// Morin's workflow (Swami, Maïano & Morin 2023, Technical Supplement pp. T10–T13):
+//   1. Run the final ESEM / bifactor-ESEM with SVALUES in the OUTPUT.
+//   2. Mplus prints a "(CFA) MODEL COMMAND WITH FINAL ROTATED ESTIMATES USED AS
+//      STARTING VALUES" block — every loading / correlation / intercept / uniqueness
+//      with its UNSTANDARDISED final estimate as a start value (`*value`).
+//   3. Convert that rotated solution into a CFA by replacing the rotational constraints
+//      with REFERENT constraints: pick one referent indicator per factor (ideally a pure
+//      item — high main loading, low cross-loadings) and fix ALL of its cross-loadings
+//      (loadings on the OTHER factors) to their ESEM value (`@value`). Fix every factor
+//      variance to 1 (`@1`). For bifactor, also pick a referent for the G-factor and fix
+//      all factor correlations to 0 (`@0`).
+//   m factors ⇒ m(m−1) fixed cross-loadings — exactly enough to replace rotation, so the
+//   EWC reproduces the ESEM fit while being a normal CFA you can embed in SEM / MIMIC / DIF.
+//
+// This module parses that SVALUES block (parseSvalues), echoes back the original
+// DATA/VARIABLE/ANALYSIS header from the .out (minus ROTATION), suggests referents, and
+// emits the complete, runnable EWC .inp (buildEwcInp).
+
+const STMT = /;?\s*$/;
+
+/** Parse the SVALUES "MODEL COMMAND ... STARTING VALUES" block + the echoed input header.
+ *  Returns { found, factors[], items[], loadings{f:{item:raw}}, withs[{a,b,raw}],
+ *  intercepts{item:raw}, uniq{item:raw}, varFixed[f], header[], generalFactor, isBifactor }.
+ *  Raw values are kept as STRINGS so the emitted .inp is byte-identical to Mplus' estimates. */
+export function parseSvalues(text) {
+  const lines = String(text).split(/\r\n|\r|\n/);
+  const hIdx = lines.findIndex((l) => /MODEL COMMAND WITH FINAL.*ESTIMATES USED AS STARTING VALUES/i.test(l));
+  if (hIdx < 0) return { found: false };
+
+  const loadings = {}, intercepts = {}, uniq = {}, withs = [], varFixed = [];
+  const factors = [], items = [];
+  const bare = []; // "name op value" lines (factor variance OR uniqueness — classify after)
+
+  for (let i = hIdx + 1; i < lines.length; i++) {
+    const L = lines[i].trim();
+    if (!L) continue;
+    if (/^(TECHNICAL|STARTING VALUES|Beginning Time|QUALITY|R-SQUARE|DIAGRAM|MUTHEN|\*\*\*)/i.test(L)) break;
+    let m;
+    if ((m = L.match(/^(\S+)\s+BY\s+(\S+)\s*([*@])\s*(-?\d*\.?\d+)/i))) {
+      const f = m[1], it = m[2];
+      if (!loadings[f]) { loadings[f] = {}; factors.push(f); }
+      loadings[f][it] = m[4];
+      if (!items.includes(it)) items.push(it);
+      continue;
+    }
+    if ((m = L.match(/^(\S+)\s+WITH\s+(\S+)\s*([*@])\s*(-?\d*\.?\d+)/i))) {
+      withs.push({ a: m[1], b: m[2], raw: m[4] });
+      continue;
+    }
+    if ((m = L.match(/^\[\s*(\S+?)\s*([*@])\s*(-?\d*\.?\d+)\s*\]/))) {
+      intercepts[m[1]] = m[3];
+      continue;
+    }
+    if ((m = L.match(/^(\S+?)\s*([*@])\s*(-?\d*\.?\d+)\s*;?\s*$/))) {
+      bare.push({ name: m[1], op: m[2], raw: m[3] });
+      continue;
+    }
+  }
+  // Classify bare "name op value" lines: known factor → variance fix; otherwise → uniqueness.
+  const isFactor = new Set(factors);
+  for (const b of bare) {
+    if (isFactor.has(b.name)) varFixed.push(b.name);
+    else uniq[b.name] = b.raw;
+  }
+
+  // Detect a bifactor general factor: loads (|λ| ≥ .2) on ALL items while the others don't,
+  // and the factor correlations are ~0 (orthogonal). Mirrors out-parser's heuristic; also
+  // treats a factor literally named g/fg loading on all items as general.
+  const num = (s) => (s == null ? null : parseFloat(s));
+  const loadsAll = (f) => items.every((it) => loadings[f]?.[it] != null && Math.abs(num(loadings[f][it])) >= 0.2);
+  const orthogonal = withs.length === 0 || withs.every((w) => Math.abs(num(w.raw)) < 0.05);
+  let generalFactor = null;
+  if (factors.length >= 2 && items.length >= 4) {
+    let g = factors.find((f) => /^(g|fg)$/i.test(f) && loadsAll(f));
+    if (!g && orthogonal) g = factors.find((f) => loadsAll(f)) || null;
+    if (g && factors.filter((f) => f !== g).every((f) => !loadsAll(f))) generalFactor = g;
+  }
+
+  const header = parseInputHeader(lines);
+  return { found: true, factors, items, loadings, withs, intercepts, uniq, varFixed, header, generalFactor, isBifactor: !!generalFactor };
+}
+
+/** Pull the echoed DATA / VARIABLE / ANALYSIS / DEFINE commands from the .out's
+ *  "INPUT INSTRUCTIONS" section, dropping TITLE / MODEL / OUTPUT and any ROTATION line.
+ *  Returns an array of de-indented command lines ready to splice into the EWC .inp. */
+function parseInputHeader(lines) {
+  const start = lines.findIndex((l) => /^INPUT INSTRUCTIONS\s*$/.test(l));
+  if (start < 0) return [];
+  let end = lines.findIndex((l, i) => i > start && /^INPUT READING TERMINATED/i.test(l));
+  if (end < 0) end = Math.min(lines.length, start + 120);
+  const KEEP = /^(DATA|VARIABLE|DEFINE|ANALYSIS)\b/i;
+  const DROP = /^(TITLE|MODEL|OUTPUT|SAVEDATA|PLOT|MONTECARLO)\b/i;
+  const CMD = /^(TITLE|DATA|VARIABLE|DEFINE|ANALYSIS|MODEL|OUTPUT|SAVEDATA|PLOT|MONTECARLO)\b/i;
+  const out = [];
+  let keep = false;
+  for (let i = start + 1; i < end; i++) {
+    const raw = lines[i].replace(/^ {0,2}/, ''); // Mplus echoes with a 2-space indent
+    const t = raw.trim();
+    if (!t) continue;
+    if (CMD.test(t)) keep = KEEP.test(t) && !DROP.test(t);
+    if (!keep) continue;
+    if (/ROTATION\s*=/i.test(t)) continue;       // EWC is not rotated
+    out.push(raw.replace(/\s+$/, ''));
+  }
+  return out;
+}
+
+/** For each factor pick the purest referent: the item that loads most strongly on this
+ *  factor (relative to its cross-loadings). Returns { factorName: itemName }.
+ *  For a bifactor model, the G-factor's referent is the item with the strongest G loading
+ *  net of its specific loadings, chosen among items not already used by a specific factor. */
+export function suggestReferents(model) {
+  const { factors, items, loadings, generalFactor } = model;
+  const num = (s) => (s == null ? null : parseFloat(s));
+  const L = (f, it) => { const v = num(loadings[f]?.[it]); return v == null ? 0 : v; };
+  const specifics = factors.filter((f) => f !== generalFactor);
+
+  // Each item's dominant specific factor (bifactor) or dominant factor (plain ESEM).
+  const dominant = {};
+  for (const it of items) {
+    let bf = null, best = -1;
+    for (const f of specifics) { const a = Math.abs(L(f, it)); if (a > best) { best = a; bf = f; } }
+    dominant[it] = bf;
+  }
+  const purity = (f, it) => Math.abs(L(f, it)) - factors.filter((o) => o !== f).reduce((s, o) => s + Math.abs(L(o, it)), 0);
+
+  const referents = {};
+  const used = new Set();
+  for (const f of specifics) {
+    const cands = items.filter((it) => dominant[it] === f);
+    const pool = cands.length ? cands : items;
+    let pick = null, best = -Infinity;
+    for (const it of pool) { const p = purity(f, it); if (p > best && !used.has(it)) { best = p; pick = it; } }
+    if (pick == null) pick = pool[0];
+    referents[f] = pick; used.add(pick);
+  }
+  if (generalFactor) {
+    let pick = null, best = -Infinity;
+    for (const it of items) {
+      if (used.has(it)) continue;
+      const p = Math.abs(L(generalFactor, it)) - specifics.reduce((s, o) => s + Math.abs(L(o, it)), 0);
+      if (p > best) { best = p; pick = it; }
+    }
+    referents[generalFactor] = pick ?? items[0];
+  }
+  return referents;
+}
+
+const DEFAULT_OUTPUT = 'SAMPSTAT STANDARDIZED CINTERVAL RESIDUAL SVALUES MODINDICES (6.0) TECH1 TECH3 TECH4';
+
+/** Build the complete ESEM-within-CFA .inp from a parsed SVALUES model.
+ *  opts: { referents?, title?, output?, header? }. Returns the .inp text. */
+export function buildEwcInp(model, opts = {}) {
+  const { factors, items, loadings, withs, intercepts, uniq, generalFactor, isBifactor } = model;
+  const referents = opts.referents || suggestReferents(model);
+  // Invert: which factor (if any) does this item act as referent for?
+  const referentOf = {};
+  for (const f of Object.keys(referents)) referentOf[referents[f]] = f;
+
+  const title = opts.title || (isBifactor ? 'Bifactor-ESEM-within-CFA' : 'ESEM-within-CFA');
+  const header = opts.header || model.header || [];
+  const out = [`TITLE: ${title};`, ...header, 'MODEL:'];
+
+  // Factor loadings — referent cross-loadings fixed (@), everything else free (*).
+  for (const f of factors) {
+    for (const it of items) {
+      if (loadings[f]?.[it] == null) continue;
+      const refFactor = referentOf[it];               // it is the referent for refFactor
+      const fixCross = refFactor != null && refFactor !== f; // this is a referent's cross-loading
+      const op = fixCross ? '@' : '*';
+      const tag = (refFactor != null && refFactor !== f) ? ` ! ${it} = referent for ${refFactor}` : '';
+      out.push(`  ${f} BY ${it}${op}${loadings[f][it]};${tag}`);
+    }
+    out.push('');
+  }
+
+  // Factor correlations — fixed to 0 for bifactor (orthogonal), free start values otherwise.
+  if (withs.length) {
+    for (const w of withs) out.push(isBifactor ? `  ${w.a} WITH ${w.b}@0;` : `  ${w.a} WITH ${w.b}*${w.raw};`);
+    out.push('');
+  }
+
+  // Item intercepts (free start values).
+  for (const it of items) if (intercepts[it] != null) out.push(`  [ ${it}*${intercepts[it]} ];`);
+  out.push('');
+  // Item uniquenesses (free start values).
+  for (const it of items) if (uniq[it] != null) out.push(`  ${it}*${uniq[it]};`);
+
+  // Factor variances fixed to 1 (replacing the rotational scale-setting).
+  out.push('  ' + factors.map((f) => `${f}@1;`).join(' '));
+  // OUTPUT on its own line so the options stay under Mplus' 90-char input limit.
+  out.push('OUTPUT:', `${opts.output || DEFAULT_OUTPUT};`);
+  return out.join('\n') + '\n';
+}
+
+/** Count the referent-fixed cross-loadings — should equal m(m−1) for an identified EWC. */
+export function fixedCrossCount(model, referents) {
+  const refs = referents || suggestReferents(model);
+  let n = 0;
+  for (const f of model.factors) for (const it of model.items) {
+    if (model.loadings[f]?.[it] == null) continue;
+    const rf = Object.keys(refs).find((k) => refs[k] === it);
+    if (rf && rf !== f) n++;
+  }
+  return n;
+}
