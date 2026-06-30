@@ -393,7 +393,7 @@ function renderEwcCard(m) {
 function renderDiagramCard(m, factorLabels) {
   const card = el('div', { class: 'surface p-6 mb-6' });
   const state = { showCross: true, showResiduals: true, theoretical: false, hidden: new Set(), crossThreshold: 0.10, positions: {} };
-  const holder = el('div', { class: 'overflow-auto', style: { padding: '4px' } });
+  const holder = el('div', { class: 'overflow-auto', style: { padding: '4px', textAlign: 'center' } });
   const optsNow = () => ({ factorLabels, showCross: state.showCross, showResiduals: state.showResiduals, theoretical: state.theoretical, hiddenFactors: [...state.hidden], crossThreshold: state.crossThreshold, positions: state.positions });
   const draw = () => { holder.innerHTML = pathDiagramSVG(m.parsed, optsNow()); };
   const svgNow = () => pathDiagramSVG(m.parsed, optsNow());

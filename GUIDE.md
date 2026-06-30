@@ -28,7 +28,7 @@ Sketch the measurement model on the **Λ target-pattern matrix**. Rows are items
 a cell to set the primary (target) loading. Choose the number of factors, the rotation, the estimator, which
 models to generate, and (optionally) a grouping variable for invariance.
 
-![Model builder](docs/img/02-model-builder.png?v=3)
+![Model builder](docs/img/02-model-builder.png?v=4)
 
 **Geomin vs Target — what the grid means.** Under **Geomin** every item loads on every factor freely (the
 rotation decides the pattern); the orange marks only label which loading you consider *primary* (for bolding,
@@ -41,7 +41,7 @@ constraints to identify the rotation, or if a factor has no main items.
 The app writes exact Mplus `.inp` for each requested model. Download a single file or a `.zip` of all of
 them; lines are wrapped to stay under Mplus's 90-character limit.
 
-![Generated syntax](docs/img/03-syntax.png?v=3)
+![Generated syntax](docs/img/03-syntax.png?v=4)
 
 A few load-bearing conventions, matched to Swami/Maïano/Morin (2023):
 
@@ -63,18 +63,18 @@ diagram. Multiple invariance models become a single comparison table with Δχ²
 MLR), ΔCFI, and ΔRMSEA, and a "supported / not supported" verdict (Chen, 2007). Export with **Copy for
 Word** or **Download .docx**.
 
-![Results — fit, loadings, diagram](docs/img/04-results.png?v=3)
+![Results — fit, loadings, diagram](docs/img/04-results.png?v=4)
 
 The diagrams follow the article's figures and are interactive — toggle cross-loadings / uniquenesses,
 show/hide factors, drag the ellipses to reposition for reporting, and export SVG or PNG. The bifactor layout
 puts the specific factors on one side and the global factor on the other, reaching every item:
 
-![Bifactor diagram](docs/img/06-bifactor-diagram.png?v=3)
+![Bifactor diagram](docs/img/06-bifactor-diagram.png?v=4)
 
 The six invariance models (men vs women) collapse into one comparison table with the Δ statistics and a
 per-step verdict:
 
-![Measurement invariance comparison table](docs/img/07-invariance.png?v=3)
+![Measurement invariance comparison table](docs/img/07-invariance.png?v=4)
 
 ## 5 · ESEM-within-CFA
 
@@ -85,7 +85,7 @@ referent's cross-loadings to their ESEM values (`@`), fixes the factor variances
 fixes all factor correlations to 0. Choose a different referent per factor from the dropdowns; copy or
 download the runnable `.inp`.
 
-![ESEM-within-CFA card](docs/img/05-esem-within-cfa.png?v=3)
+![ESEM-within-CFA card](docs/img/05-esem-within-cfa.png?v=4)
 
 This is Morin's referent method (Technical Supplement, pp. T10–T13). With the same referents, the toolkit
 reproduces the published ESEM-within-CFA byte-for-byte at the parameter level.

@@ -17,7 +17,7 @@ in body image research_, _Body Image_ 47, 262–278.**
 > **▶ Try it live (no install): https://cahitgs.github.io/esem-mplus-toolkit/**
 > &nbsp;·&nbsp; **Guided demo (worked example): https://cahitgs.github.io/esem-mplus-toolkit/demo.html**
 
-![Model builder — Λ target-pattern matrix, live syntax, conceptual diagram](docs/img/02-model-builder.png?v=3)
+![Model builder — Λ target-pattern matrix, live syntax, conceptual diagram](docs/img/02-model-builder.png?v=4)
 
 ---
 
@@ -54,7 +54,7 @@ and the **Results** step offers a one-click conversion to ESEM-within-CFA: it re
 unstandardized estimates, picks a referent indicator per factor, fixes that referent's cross-loadings to
 their ESEM values (and, for bifactor, all factor correlations to 0), and writes a runnable `.inp`.
 
-![ESEM-within-CFA card](docs/img/05-esem-within-cfa.png?v=3)
+![ESEM-within-CFA card](docs/img/05-esem-within-cfa.png?v=4)
 
 **Verified against real Mplus 8.3:** the generated oblique ESEM-within-CFA reproduces the source ESEM
 *exactly* — identical number of free parameters, degrees of freedom, χ², and log-likelihood
