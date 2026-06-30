@@ -509,9 +509,12 @@ async function devBootstrap(which) {
 // first-time visitor sees real APA tables, diagrams, and the ESEM-within-CFA card in one click.
 // (Distinct from the developer-only `?dev=` fixtures.)
 const DEMO_SETS = {
-  results: ['1_CFA.out', '2_ESEM_geomin.out', '4_Bifactor_ESEM.out'],
-  esem: ['1_CFA.out', '2_ESEM_geomin.out'],
-  bifactor: ['4_Bifactor_ESEM.out'],
+  results: ['1_CFA.out', '2_ESEM_geomin.out', '5_Bifactor_ESEM.out'],
+  measurement: ['1_CFA.out', '2_ESEM_geomin.out', '3_ESEM_target.out', '4_Bifactor_CFA.out', '5_Bifactor_ESEM.out'],
+  esem: ['2_ESEM_geomin.out'],
+  target: ['3_ESEM_target.out'],
+  bifactorcfa: ['4_Bifactor_CFA.out'],
+  bifactor: ['5_Bifactor_ESEM.out'],
   ewc: ['2_ESEM_geomin.out'],
   invariance: ['inv_1_configural.out', 'inv_2_metric.out', 'inv_3_scalar.out', 'inv_4_strict.out', 'inv_5_varcov.out', 'inv_6_latentmean.out'],
 };
@@ -522,14 +525,14 @@ async function demoBootstrap(which) {
     try {
       const text = await fetch('example-dataset/data.dat').then((r) => r.text());
       const data = parseDataFile(text, 'data.dat');
-      data.varNames = Array.from({ length: 24 }, (_, i) => 'M' + (i + 1)).concat('GRP');
+      data.varNames = Array.from({ length: 15 }, (_, i) => 'i' + (i + 1)).concat('gender');
       data.mplusFile = 'data.dat';
       appState.data = data;
       const spec = createModelSpec(data);
-      spec.items = data.varNames.slice(0, 24);
-      spec.factors = [1, 2, 3, 4].map((i) => ({ id: 'F' + i, label: 'F' + i }));
+      spec.items = data.varNames.slice(0, 15);
+      spec.factors = [1, 2, 3].map((i) => ({ id: 'F' + i, label: 'F' + i }));
       spec.target = {};
-      spec.items.forEach((it, i) => { spec.target[it] = {}; spec.factors.forEach((f, fi) => { spec.target[it][f.id] = fi === Math.floor(i / 6); }); });
+      spec.items.forEach((it, i) => { spec.target[it] = {}; spec.factors.forEach((f, fi) => { spec.target[it][f.id] = fi === Math.floor(i / 5); }); });
       spec.rotation = { type: 'GEOMIN', oblique: true, epsilon: 0.5 };
       appState.spec = spec;
       unlock('model'); mountModelBuilder($('#model-host'), spec, { onChange: onModelChange });

@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>4-factor demo · Simple Structure (ESEM Mplus Toolkit)</title>
-<meta name="description" content="A 5-minute, step-by-step worked example: build Mplus ESEM/bifactor syntax, read the output as APA tables and diagrams, and convert to ESEM-within-CFA — with a ready-made 4-factor dataset." />
+<title>3-factor demo · Simple Structure (ESEM Mplus Toolkit)</title>
+<meta name="description" content="A step-by-step worked example mirroring the 3-factor / bifactor structure of Swami, Maïano & Morin (2023): build CFA, ESEM, bifactor, invariance, and ESEM-within-CFA syntax, then read the output as APA tables and diagrams." />
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -39,6 +39,8 @@
   .pill { font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; padding: 3px 8px;
     border-radius: 6px; background: var(--petrol); color: var(--paper); white-space: nowrap; }
   a.cta-link { text-decoration: none; }
+  .modelchip { font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink-soft); }
 </style>
 </head>
 
@@ -64,15 +66,15 @@
   <!-- Hero -->
   <section class="pt-14 pb-10 grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
     <div>
-      <p class="eyebrow mb-4">Guided demo · 5 minutes · no install</p>
-      <h1 class="display-xl text-ink mb-5">See it work on a<br>4-factor example.</h1>
+      <p class="eyebrow mb-4">Guided demo · the full analysis set · no install</p>
+      <h1 class="display-xl text-ink mb-5">A 3-factor<br>worked example.</h1>
       <p class="lede mb-7" style="max-width:48ch">
-        A ready-made <span class="font-semibold">synthetic</span> dataset and its real Mplus output are bundled in.
-        Walk the six steps below, or jump straight to the finished APA tables and diagrams — then convert the
-        ESEM into an <span class="font-semibold">ESEM-within-CFA</span> in one click.
+        A <span class="font-semibold">synthetic</span> 15-item dataset that mirrors the 3-factor / bifactor
+        structure of Swami, Maïano &amp; Morin (2023). Every model in the guide is bundled with its real Mplus
+        output — CFA, ESEM, bifactor, measurement invariance, and ESEM-within-CFA.
       </p>
       <div class="flex flex-wrap gap-3">
-        <a class="btn btn-accent cta-link" href="index.html?demo=results">▶ See the 4-factor results</a>
+        <a class="btn btn-accent cta-link" href="index.html?demo=measurement">▶ Compare all measurement models</a>
         <a class="btn btn-ghost cta-link" href="index.html">Build it from scratch</a>
       </div>
       <p class="mt-4 text-[0.82rem]" style="color:var(--ink-faint)">
@@ -88,23 +90,35 @@
         <span class="pill">data.dat</span>
       </div>
       <p class="text-[0.92rem] mb-4" style="color:var(--ink-soft)">
-        <span class="font-semibold text-ink">500 respondents × 24 items</span> with a true bifactor structure:
-        one general factor plus four specific factors of six items each.
+        <span class="font-semibold text-ink">600 respondents × 15 items</span>, a true bifactor structure:
+        one general factor plus three specific factors of five items each.
       </p>
-      <div class="grid grid-cols-4 gap-2 mb-3">
-        <!-- 4 blocks of 6 -->
-        <div class="text-center"><div class="text-[0.72rem] font-mono mb-1" style="color:var(--ink-faint)">F1</div><div style="height:46px;border-radius:8px;background:linear-gradient(160deg,var(--ochre-soft),var(--ochre))"></div><div class="text-[0.68rem] font-mono mt-1" style="color:var(--ink-faint)">M1–M6</div></div>
-        <div class="text-center"><div class="text-[0.72rem] font-mono mb-1" style="color:var(--ink-faint)">F2</div><div style="height:46px;border-radius:8px;background:linear-gradient(160deg,var(--ochre-soft),var(--ochre))"></div><div class="text-[0.68rem] font-mono mt-1" style="color:var(--ink-faint)">M7–M12</div></div>
-        <div class="text-center"><div class="text-[0.72rem] font-mono mb-1" style="color:var(--ink-faint)">F3</div><div style="height:46px;border-radius:8px;background:linear-gradient(160deg,var(--ochre-soft),var(--ochre))"></div><div class="text-[0.68rem] font-mono mt-1" style="color:var(--ink-faint)">M13–M18</div></div>
-        <div class="text-center"><div class="text-[0.72rem] font-mono mb-1" style="color:var(--ink-faint)">F4</div><div style="height:46px;border-radius:8px;background:linear-gradient(160deg,var(--ochre-soft),var(--ochre))"></div><div class="text-[0.68rem] font-mono mt-1" style="color:var(--ink-faint)">M19–M24</div></div>
+      <div class="grid grid-cols-3 gap-2 mb-3">
+        <div class="text-center"><div class="text-[0.72rem] font-mono mb-1" style="color:var(--ink-faint)">F1</div><div style="height:46px;border-radius:8px;background:linear-gradient(160deg,var(--ochre-soft),var(--ochre))"></div><div class="text-[0.68rem] font-mono mt-1" style="color:var(--ink-faint)">i1–i5</div></div>
+        <div class="text-center"><div class="text-[0.72rem] font-mono mb-1" style="color:var(--ink-faint)">F2</div><div style="height:46px;border-radius:8px;background:linear-gradient(160deg,var(--ochre-soft),var(--ochre))"></div><div class="text-[0.68rem] font-mono mt-1" style="color:var(--ink-faint)">i6–i10</div></div>
+        <div class="text-center"><div class="text-[0.72rem] font-mono mb-1" style="color:var(--ink-faint)">F3</div><div style="height:46px;border-radius:8px;background:linear-gradient(160deg,var(--ochre-soft),var(--ochre))"></div><div class="text-[0.68rem] font-mono mt-1" style="color:var(--ink-faint)">i11–i15</div></div>
       </div>
-      <div style="height:30px;border-radius:8px;background:linear-gradient(160deg,var(--petrol-bright),var(--petrol-deep));display:grid;place-items:center;color:#EAF3F1;font-family:'JetBrains Mono';font-size:0.74rem">G — general factor (all 24 items)</div>
-      <p class="text-[0.78rem] mt-3" style="color:var(--ink-faint)">Plus a 2-group variable <span class="font-mono">GRP</span> for the invariance demo. Fully synthetic — no real participants.</p>
+      <div style="height:30px;border-radius:8px;background:linear-gradient(160deg,var(--petrol-bright),var(--petrol-deep));display:grid;place-items:center;color:#EAF3F1;font-family:'JetBrains Mono';font-size:0.74rem">G — general factor (all 15 items)</div>
+      <p class="text-[0.78rem] mt-3" style="color:var(--ink-faint)">Plus a 2-group <span class="font-mono">gender</span> variable for the invariance models. Fully synthetic — no real participants.</p>
+    </div>
+  </section>
+
+  <!-- model chips -->
+  <section class="pb-6">
+    <p class="eyebrow mb-3">eight models, all bundled with real Mplus output</p>
+    <div class="flex flex-wrap gap-2">
+      <a class="modelchip cta-link" href="index.html?demo=results">CFA</a>
+      <a class="modelchip cta-link" href="index.html?demo=esem">ESEM · Geomin</a>
+      <a class="modelchip cta-link" href="index.html?demo=target">ESEM · Target</a>
+      <a class="modelchip cta-link" href="index.html?demo=bifactorcfa">Bifactor-CFA</a>
+      <a class="modelchip cta-link" href="index.html?demo=bifactor">Bifactor-ESEM</a>
+      <a class="modelchip cta-link" href="index.html?demo=invariance">Invariance ×6</a>
+      <a class="modelchip cta-link" href="index.html?demo=ewc">ESEM-within-CFA</a>
     </div>
   </section>
 
   <!-- Steps -->
-  <section class="py-8">
+  <section class="py-6">
     <p class="eyebrow mb-6">the workflow, step by step</p>
 
     <!-- 01 -->
@@ -114,8 +128,9 @@
         <h2 class="font-display text-xl text-ink mb-2">The data</h2>
         <p class="text-[0.92rem] mb-4" style="color:var(--ink-soft);max-width:64ch">
           <span class="font-mono pill">data.dat</span> is space-delimited, no header, dot decimals — Mplus free
-          format. In the app, <span class="font-semibold">Data</span> auto-detects the 25 columns; if your own
-          file is a semicolon CSV or uses comma decimals, the app exports a clean Mplus-ready <span class="font-mono">.dat</span> for you.
+          format (16 columns: items <span class="font-mono">i1–i15</span> + <span class="font-mono">gender</span>).
+          When you load your own file, the app auto-detects columns and can export a clean Mplus-ready
+          <span class="font-mono">.dat</span> from a semicolon CSV or comma decimals.
         </p>
         <div class="flex flex-wrap gap-2">
           <a class="btn btn-ghost cta-link" href="example-dataset/data.dat" download>Download data.dat</a>
@@ -131,12 +146,12 @@
       <div class="surface p-6 mb-0">
         <h2 class="font-display text-xl text-ink mb-2">Build the model</h2>
         <p class="text-[0.92rem] mb-4" style="color:var(--ink-soft);max-width:64ch">
-          On the Λ target-pattern matrix set four factors (M1–M6 → F1, M7–M12 → F2, M13–M18 → F3, M19–M24 → F4),
-          pick a rotation (Geomin or Target), the estimator (MLR), and which models to generate. A live syntax
-          preview and a conceptual diagram update as you click.
+          On the Λ target-pattern matrix set three factors (i1–i5 → F1, i6–i10 → F2, i11–i15 → F3), pick a
+          rotation (Geomin or Target), the estimator (MLR), and which models to generate. A live syntax preview
+          and a conceptual diagram update as you click.
         </p>
-        <div class="shot mb-4"><img src="docs/img/02-model-builder.png?v=2" alt="Model builder with the Λ target-pattern matrix, live syntax, and conceptual diagram" loading="lazy" /></div>
-        <a class="btn btn-ghost cta-link" href="index.html?demo=model">▶ Open the model step (4 factors preloaded)</a>
+        <div class="shot mb-4"><img src="docs/img/02-model-builder.png?v=3" alt="Model builder with the Λ target-pattern matrix, live syntax, and conceptual diagram" loading="lazy" /></div>
+        <a class="btn btn-ghost cta-link" href="index.html?demo=model">▶ Open the model step (3 factors preloaded)</a>
       </div>
     </div>
     <div class="rule"></div>
@@ -147,12 +162,12 @@
       <div class="surface p-6 mb-0">
         <h2 class="font-display text-xl text-ink mb-2">Generate the syntax</h2>
         <p class="text-[0.92rem] mb-4" style="color:var(--ink-soft);max-width:64ch">
-          The app writes exact Mplus <span class="font-mono">.inp</span> for each model — CFA, ESEM (Geomin/Target),
-          bifactor-ESEM, and the invariance sequence — wrapped under the 90-character limit. ESEM outputs include
-          <span class="font-mono">SVALUES</span>, which you'll need for ESEM-within-CFA. Download one file or a
-          <span class="font-mono">.zip</span> of all.
+          The app writes exact Mplus <span class="font-mono">.inp</span> for every model — CFA, ESEM
+          (Geomin &amp; Target), bifactor-CFA, bifactor-ESEM, and the six invariance steps — wrapped under the
+          90-character limit. ESEM outputs include <span class="font-mono">SVALUES</span> for ESEM-within-CFA.
+          Download one file or a <span class="font-mono">.zip</span> of all.
         </p>
-        <div class="shot mb-4"><img src="docs/img/03-syntax.png?v=2" alt="Generated Mplus .inp syntax" loading="lazy" /></div>
+        <div class="shot mb-4"><img src="docs/img/03-syntax.png?v=3" alt="Generated Mplus .inp syntax" loading="lazy" /></div>
         <a class="btn btn-ghost cta-link" href="index.html?demo=syntax">▶ Open the syntax step</a>
       </div>
     </div>
@@ -164,10 +179,10 @@
       <div class="surface p-6 mb-0">
         <h2 class="font-display text-xl text-ink mb-2">Run it in your Mplus</h2>
         <p class="text-[0.92rem]" style="color:var(--ink-soft);max-width:64ch">
-          This is the only step outside the app. Open each <span class="font-mono">.inp</span> in your own licensed
-          Mplus and save the <span class="font-mono">.out</span>. For this demo the runs are already done — every
-          <span class="font-mono">.out</span> in <span class="font-mono">example-dataset/</span> is a real
-          Mplus&nbsp;8.3 result that converged with full standard errors and fit.
+          This is the only step outside the app. Open each <span class="font-mono">.inp</span> in your own
+          licensed Mplus and save the <span class="font-mono">.out</span>. For this demo the runs are already
+          done — all eleven <span class="font-mono">.out</span> files in <span class="font-mono">example-dataset/</span>
+          are real Mplus&nbsp;8.3 results that converged with full standard errors and fit.
         </p>
       </div>
     </div>
@@ -181,15 +196,13 @@
         <p class="text-[0.92rem] mb-4" style="color:var(--ink-soft);max-width:64ch">
           Drop the <span class="font-mono">.out</span> files back in. Each becomes a fit row, a standardized
           loadings table (target loadings bold, δ uniqueness, ω, factor correlations), auto-written prose, and an
-          interactive path diagram. The six invariance models become one comparison table with Satorra–Bentler
-          scaled Δχ², ΔCFI, ΔRMSEA and verdicts. Export with <span class="font-semibold">Copy for Word</span> or
-          <span class="font-semibold">Download .docx</span>.
+          interactive path diagram. Drop several together and they share one fit-comparison table.
         </p>
-        <div class="shot mb-4"><img src="docs/img/04-results.png?v=2" alt="APA fit table, standardized loadings, and path diagram" loading="lazy" /></div>
+        <div class="shot mb-4"><img src="docs/img/04-results.png?v=3" alt="APA fit comparison, standardized loadings, and path diagrams" loading="lazy" /></div>
         <div class="flex flex-wrap gap-2">
-          <a class="btn btn-accent cta-link" href="index.html?demo=results">▶ Open: CFA + ESEM + bifactor</a>
-          <a class="btn btn-ghost cta-link" href="index.html?demo=invariance">▶ Open: invariance sequence</a>
-          <a class="btn btn-ghost cta-link" href="index.html?demo=bifactor">▶ Open: bifactor diagram</a>
+          <a class="btn btn-accent cta-link" href="index.html?demo=measurement">▶ All five measurement models</a>
+          <a class="btn btn-ghost cta-link" href="index.html?demo=results">▶ CFA + ESEM + bifactor</a>
+          <a class="btn btn-ghost cta-link" href="index.html?demo=bifactorcfa">▶ Bifactor-CFA</a>
         </div>
       </div>
     </div>
@@ -199,14 +212,47 @@
     <div class="step-card">
       <div class="stepnum">06</div>
       <div class="surface p-6 mb-0">
+        <h2 class="font-display text-xl text-ink mb-2">Bifactor diagram</h2>
+        <p class="text-[0.92rem] mb-4" style="color:var(--ink-soft);max-width:64ch">
+          The diagrams follow the article's figures and are interactive — toggle cross-loadings / uniquenesses,
+          show/hide factors, drag the ellipses to reposition, and export SVG / PNG. The bifactor layout puts the
+          three specific factors on one side and the global factor on the other, reaching every item.
+        </p>
+        <div class="shot mb-4"><img src="docs/img/06-bifactor-diagram.png?v=3" alt="Bifactor path diagram" loading="lazy" /></div>
+        <a class="btn btn-ghost cta-link" href="index.html?demo=bifactor">▶ Open the bifactor-ESEM result</a>
+      </div>
+    </div>
+    <div class="rule"></div>
+
+    <!-- 07 -->
+    <div class="step-card">
+      <div class="stepnum">07</div>
+      <div class="surface p-6 mb-0">
+        <h2 class="font-display text-xl text-ink mb-2">Measurement invariance</h2>
+        <p class="text-[0.92rem] mb-4" style="color:var(--ink-soft);max-width:64ch">
+          Drop the six <span class="font-mono">inv_*.out</span> files together (men vs women) and they collapse
+          into one comparison table: configural → metric → scalar → strict → variance–covariance → latent means,
+          with Satorra–Bentler scaled Δχ², ΔCFI, ΔRMSEA, and a "supported / not supported" verdict (Chen, 2007).
+        </p>
+        <div class="shot mb-4"><img src="docs/img/07-invariance.png?v=3" alt="Measurement invariance comparison table" loading="lazy" /></div>
+        <a class="btn btn-ghost cta-link" href="index.html?demo=invariance">▶ Open the invariance sequence</a>
+      </div>
+    </div>
+    <div class="rule"></div>
+
+    <!-- 08 -->
+    <div class="step-card">
+      <div class="stepnum">08</div>
+      <div class="surface p-6 mb-0">
         <h2 class="font-display text-xl text-ink mb-2">Convert to ESEM-within-CFA</h2>
         <p class="text-[0.92rem] mb-4" style="color:var(--ink-soft);max-width:64ch">
           Because the ESEM <span class="font-mono">.out</span> carries a SVALUES block, Results shows an
           <span class="font-semibold">ESEM-within-CFA</span> card: it picks a referent indicator per factor, fixes
           that referent's cross-loadings to their ESEM values, and writes a runnable CFA you can embed in larger
-          SEM / MIMIC / DIF models (Morin's referent method). Verified in Mplus to reproduce the source ESEM exactly.
+          SEM / MIMIC / DIF models (Morin's referent method). Verified in Mplus to reproduce the source ESEM
+          exactly (here: df 63, log-likelihood −11107.13 in both).
         </p>
-        <div class="shot mb-4"><img src="docs/img/05-esem-within-cfa.png?v=2" alt="ESEM-within-CFA card with referent pickers and generated syntax" loading="lazy" /></div>
+        <div class="shot mb-4"><img src="docs/img/05-esem-within-cfa.png?v=3" alt="ESEM-within-CFA card with referent pickers and generated syntax" loading="lazy" /></div>
         <a class="btn btn-accent cta-link" href="index.html?demo=ewc">▶ Open the ESEM-within-CFA demo</a>
       </div>
     </div>
@@ -220,7 +266,7 @@
   </section>
 
   <footer class="py-10 border-t text-[0.82rem]" style="border-color:var(--line);color:var(--ink-faint)">
-    <p class="mb-1">Table format and syntax follow Swami, Maïano &amp; Morin (2023), <em>A guide to ESEM and bifactor-ESEM</em>, <em>Body Image</em> 47.</p>
+    <p class="mb-1">Table format and syntax follow Swami, Maïano &amp; Morin (2023), <em>A guide to ESEM and bifactor-ESEM</em>, <em>Body Image</em> 47. The example data is synthetic and mirrors that 3-factor structure; the article and its data are not redistributed here.</p>
     <p>Independent tool · not affiliated with Mplus or the article authors · <a style="color:var(--petrol)" href="https://github.com/cahitgs/esem-mplus-toolkit">source on GitHub</a></p>
   </footer>
 </main>

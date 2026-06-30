@@ -15,8 +15,7 @@ deneme-4faktor/
 temporary screenshots/
 
 # Dev-only helper scripts
-_gen4f.mjs
-_mkdoc.mjs
+_*.mjs
 topdf.mjs
 
 # Misc
