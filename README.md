@@ -15,6 +15,7 @@ The syntax and APA table format follow **Swami, Maïano & Morin (2023), _A guide
 in body image research_, _Body Image_ 47, 262–278.**
 
 > **▶ Try it live (no install): https://cahitgs.github.io/esem-mplus-toolkit/**
+> &nbsp;·&nbsp; **Guided 4-factor demo: https://cahitgs.github.io/esem-mplus-toolkit/demo.html**
 
 ![Model builder — Λ target-pattern matrix, live syntax, conceptual diagram](docs/img/02-model-builder.png)
 

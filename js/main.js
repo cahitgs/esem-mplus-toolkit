@@ -505,14 +505,40 @@ async function devBootstrap(which) {
   }
 }
 
+// Public demo mode: load the bundled 4-factor example .out files straight into Results so a
+// first-time visitor sees real APA tables, diagrams, and the ESEM-within-CFA card in one click.
+// (Distinct from the developer-only `?dev=` fixtures.)
+const DEMO_SETS = {
+  results: ['1_CFA.out', '2_ESEM_geomin.out', '4_Bifactor_ESEM.out'],
+  esem: ['1_CFA.out', '2_ESEM_geomin.out'],
+  bifactor: ['4_Bifactor_ESEM.out'],
+  ewc: ['2_ESEM_geomin.out'],
+  invariance: ['inv_1_configural.out', 'inv_2_metric.out', 'inv_3_scalar.out', 'inv_4_strict.out', 'inv_5_varcov.out', 'inv_6_latentmean.out'],
+};
+async function demoBootstrap(which) {
+  appState.reached.model = appState.reached.syntax = true;
+  unlock('results'); renderResultsStep();
+  const files = DEMO_SETS[which] || DEMO_SETS.results;
+  for (const n of files) {
+    try {
+      const t = await fetch('example-dataset/' + n).then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); });
+      const p = parseOut(t);
+      appState.parsed.push({ label: deriveLabel(p, n), parsed: p, fileName: n, raw: t });
+    } catch { toast(`Demo: could not load ${n}`, 'err'); }
+  }
+  renderResultsOutput();
+}
+
 // ============================ init ============================
 function init() {
   $$('#stepper .step').forEach((btn) => btn.addEventListener('click', () => goStep(btn.dataset.step)));
   wireDropzone();
   // Shortcut for users who already have .out files and don't need to build a model.
   $('#skip-to-results')?.addEventListener('click', () => { appState.reached.model = appState.reached.syntax = true; unlock('results'); renderResultsStep(); });
-  const dev = new URLSearchParams(location.search).get('dev');
-  if (dev) devBootstrap(dev);
+  const params = new URLSearchParams(location.search);
+  const demo = params.get('demo'), dev = params.get('dev');
+  if (demo) demoBootstrap(demo);
+  else if (dev) devBootstrap(dev);
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
