@@ -105,7 +105,8 @@ export function invarianceDecision(prev, cur) {
   return { ok, text: dcfi == null ? '—' : (ok ? 'Supported' : 'Not supported'), dcfi, drmsea };
 }
 
-export function renderInvarianceTable(models, { caption = 'Tests of measurement invariance across groups' } = {}) {
+export function renderInvarianceTable(models, { caption, longitudinal = false } = {}) {
+  if (!caption) caption = longitudinal ? 'Tests of longitudinal measurement invariance' : 'Tests of measurement invariance across groups';
   const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', 'Δχ²(s)', 'Δdf', 'ΔCFI', 'ΔRMSEA', 'Decision'];
   let rows = '';
   models.forEach((m, i) => {
@@ -119,12 +120,14 @@ export function renderInvarianceTable(models, { caption = 'Tests of measurement 
       `<span style="${colour};font-weight:600">${dec.text}</span>`];
     rows += `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`;
   });
-  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} across ${models[0]?.parsed.nGroups ?? 2} groups. Models are ordered from least to most constrained; each Δ compares with the preceding model. Invariance is supported when ΔCFI ≥ −.010 and ΔRMSEA ≤ .015 (Chen, 2007). Δχ²(s) = Satorra–Bentler scaled difference. * <i>p</i> &lt; .05.</p>`;
+  const across = longitudinal ? 'across two time points' : `across ${models[0]?.parsed.nGroups ?? 2} groups`;
+  const note = `<p class="apa-note"><i>Note.</i> N = ${models[0]?.parsed.nObs ?? '—'} ${across}. Models are ordered from least to most constrained; each Δ compares with the preceding model. Invariance is supported when ΔCFI ≥ −.010 and ΔRMSEA ≤ .015 (Chen, 2007). Δχ²(s) = Satorra–Bentler scaled difference. * <i>p</i> &lt; .05.</p>`;
   return `<table class="apa-table"><caption><b>Table.</b> ${caption}</caption><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>${note}`;
 }
 
-export function renderInvarianceProse(models) {
+export function renderInvarianceProse(models, { longitudinal = false } = {}) {
   if (models.length < 2) return '';
+  const over = longitudinal ? 'across the two time points' : 'across groups';
   const supported = [], failedAt = [];
   models.forEach((m, i) => {
     if (i === 0) { supported.push(m.label); return; }
@@ -134,12 +137,12 @@ export function renderInvarianceProse(models) {
   let s = `Configural invariance provided a baseline against which more constrained models were compared. `;
   if (!failedAt.length) {
     const held = joinList(supported.slice(1).map((x) => x.toLowerCase()));
-    s += `All constraints were tenable: ${held} invariance were each supported (ΔCFI ≥ −.010, ΔRMSEA ≤ .015), indicating full measurement invariance across groups.`;
+    s += `All constraints were tenable: ${held} invariance were each supported (ΔCFI ≥ −.010, ΔRMSEA ≤ .015), indicating full measurement invariance ${over}.`;
   } else {
     const first = failedAt[0];
     const held = supported.slice(1).map((x) => x.toLowerCase());
     s += held.length ? `${joinList(held)} invariance ${held.length > 1 ? 'were' : 'was'} supported, but ` : '';
-    s += `${first.m.label.toLowerCase()} invariance was not supported (ΔCFI = ${signed(first.dec.dcfi, 3)}, ΔRMSEA = ${signed(first.dec.drmsea, 3)}), indicating non-invariance at this level. Partial-invariance follow-ups (freeing the most divergent parameters via modification indices) are recommended before comparing groups further.`;
+    s += `${first.m.label.toLowerCase()} invariance was not supported (ΔCFI = ${signed(first.dec.dcfi, 3)}, ΔRMSEA = ${signed(first.dec.drmsea, 3)}), indicating non-invariance at this level. Partial-invariance follow-ups (freeing the most divergent parameters via modification indices) are recommended before comparing ${longitudinal ? 'time points' : 'groups'} further.`;
   }
   return `<p class="apa-prose">${s}</p>`;
 }

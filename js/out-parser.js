@@ -87,6 +87,7 @@ export function parseOut(text) {
   const lines = String(text).split(/\r\n|\r|\n/);
   const res = {
     title: null, estimator: null, rotation: null, nObs: null, nFreeParams: null,
+    invKind: null, invStep: null, invModel: null,
     fit: {}, loadings: {}, factorOrder: [], items: [], factorCorr: [],
     residualVariances: {}, intercepts: {}, factorVariances: {}, rSquare: {},
     uniqueness: {}, omega: {}, primaryFactor: {}, regressions: [],
@@ -105,6 +106,15 @@ export function parseOut(text) {
   const summaryIdx = findLine(lines, /^SUMMARY OF ANALYSIS\s*$/);
   if (summaryIdx > 0) {
     for (let i = summaryIdx - 1; i >= 0; i--) { if (lines[i].trim()) { res.title = lines[i].trim(); break; } }
+  }
+  // Recognize app-generated longitudinal invariance outputs by their TITLE so the Results step can
+  // group a dropped set into one sequential comparison table (these models are single-group, so
+  // nGroups can't be used). "Longitudinal invariance [(CFA)] - <Step>".
+  if (res.title && /^Longitudinal invariance/i.test(res.title)) {
+    res.invKind = 'longitudinal';
+    res.invModel = /\(CFA\)/i.test(res.title) ? 'cfa' : 'esem';
+    const m = res.title.match(/-\s*(.+)$/);
+    res.invStep = m ? m[1].trim() : null; // e.g. "Metric (loadings)"
   }
   let mm;
   for (const L of lines.slice(0, summaryIdx > 0 ? summaryIdx + 40 : 60)) {

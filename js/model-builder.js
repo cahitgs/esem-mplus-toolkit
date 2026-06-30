@@ -1,7 +1,7 @@
 // model-builder.js — Step 2 UI: factor controls, the Λ target-pattern grid, and a live
 // syntax preview. Mutates the shared ModelSpec via state.js helpers and re-renders.
 import { el, $, $$ } from './ui.js';
-import { setFactorCount, setItems, toggleTarget, factorIds, validateSpec } from './state.js';
+import { setFactorCount, setItems, setWaveItems, toggleTarget, factorIds, validateSpec } from './state.js';
 import { buildInp, requestedModels, INV_SEQUENCE, INV_META } from './syntax-generator.js';
 import { distinctValues } from './data-parse.js';
 import { conceptDiagramSVG } from './diagram.js';
@@ -44,7 +44,7 @@ function buildLayout() {
   controls.append(modelTypeControls());
 
   // measurement invariance
-  controls.append(sectionTitle('5', 'Measurement invariance', 'Compare groups (optional)'));
+  controls.append(sectionTitle('5', 'Measurement invariance', 'Across groups or time (optional)'));
   controls.append(el('div', { id: 'mb-groups' }));
 
   // validation messages
@@ -235,14 +235,48 @@ function refresh() {
 function renderGroups() {
   const host = $('#mb-groups'); if (!host) return;
   host.innerHTML = '';
-  const avail = SPEC.data.varNames.filter((v) => !SPEC.items.includes(v));
-  host.append(el('label', { class: 'flex items-center gap-2.5 cursor-pointer' }, [
-    el('input', { type: 'checkbox', checked: SPEC.groups.enabled, style: { accentColor: 'var(--petrol)' }, onchange: (e) => { SPEC.groups.enabled = e.target.checked; if (e.target.checked && !SPEC.groups.variable && avail.length) pickGroupVar(avail[0]); refresh(); } }),
-    el('span', { class: 'font-semibold text-[0.9rem]', style: { color: 'var(--ink)' } }, 'Test invariance across groups'),
-  ]));
-  if (!SPEC.groups.enabled) return;
-  if (!avail.length) { host.append(el('p', { class: 'text-[0.8rem] mt-2', style: { color: 'var(--danger)' } }, 'Leave a variable unselected as items to use it for grouping.')); return; }
+  const invOn = SPEC.groups.enabled || SPEC.longitudinal.enabled;
 
+  // master enable
+  host.append(el('label', { class: 'flex items-center gap-2.5 cursor-pointer' }, [
+    el('input', { type: 'checkbox', checked: invOn, style: { accentColor: 'var(--petrol)' }, onchange: (e) => {
+      if (e.target.checked) setInvMode('groups'); else { SPEC.groups.enabled = false; SPEC.longitudinal.enabled = false; }
+      refresh();
+    } }),
+    el('span', { class: 'font-semibold text-[0.9rem]', style: { color: 'var(--ink)' } }, 'Test measurement invariance'),
+  ]));
+  if (!invOn) return;
+
+  // mode: across groups ↔ across time points (mutually exclusive)
+  const mode = SPEC.longitudinal.enabled ? 'time' : 'groups';
+  host.append(el('div', { class: 'mt-3' }, segmented('mb-invmode', [
+    { v: 'groups', t: 'Across groups' }, { v: 'time', t: 'Across time' },
+  ], mode, (v) => { setInvMode(v); refresh(); })));
+
+  if (mode === 'time') renderTimeMode(host);
+  else renderGroupsMode(host);
+
+  // shared: invariance steps
+  const seqHolder = mode === 'time' ? SPEC.longitudinal.invariance : SPEC.groups.invariance;
+  const seqBox = el('div', { class: 'flex flex-col gap-1 mt-2' });
+  for (const step of INV_SEQUENCE) {
+    seqBox.append(el('label', { class: 'flex items-center gap-2 cursor-pointer text-[0.82rem]' }, [
+      el('input', { type: 'checkbox', checked: seqHolder.sequence.includes(step), style: { accentColor: 'var(--ochre)' }, onchange: (e) => { toggleStep(seqHolder, step, e.target.checked); updatePreview(); } }),
+      INV_META[step].label,
+    ]));
+  }
+  host.append(el('p', { class: 'text-[0.78rem] mt-3 mb-1', style: { color: 'var(--ink-faint)' } }, 'Invariance steps (in order)'), seqBox);
+
+  const banner = mode === 'time'
+    ? 'With time on, “Generate syntax” produces a longitudinal invariance sequence (one .inp per step, for each checked CFA/ESEM model). The Λ grid above is the Time-1 pattern, mirrored to Time 2; matching indicators’ residuals are correlated across waves.'
+    : 'With grouping on, “Generate syntax” produces this invariance sequence (using the ESEM measurement model above), one .inp per step.';
+  host.append(el('p', { class: 'text-[0.76rem] mt-3 px-3 py-2 rounded-lg', style: { background: 'var(--petrol-tint)', color: 'var(--petrol-deep)' } }, banner));
+}
+
+function renderGroupsMode(host) {
+  const avail = SPEC.data.varNames.filter((v) => !SPEC.items.includes(v));
+  if (!avail.length) { host.append(el('p', { class: 'text-[0.8rem] mt-2', style: { color: 'var(--danger)' } }, 'Leave a variable unselected as items to use it for grouping.')); return; }
+  if (!SPEC.groups.variable) pickGroupVar(avail[0]);
   const sel = el('select', { class: 'px-2.5 py-1.5 rounded text-[0.84rem] mt-2', style: { border: '1px solid var(--line-strong)', background: 'var(--surface)' }, onchange: (e) => { pickGroupVar(e.target.value); refresh(); } },
     avail.map((v) => el('option', { value: v, selected: v === SPEC.groups.variable }, v)));
   host.append(el('div', { class: 'flex items-center gap-2 mt-2' }, [el('span', { class: 'text-[0.8rem]', style: { color: 'var(--ink-soft)' } }, 'Grouping variable'), sel]));
@@ -255,17 +289,72 @@ function renderGroups() {
     ])));
     host.append(el('p', { class: 'text-[0.78rem] mt-3 mb-1', style: { color: 'var(--ink-faint)' } }, 'Group labels'), codeBox);
   }
+}
 
-  const seqBox = el('div', { class: 'flex flex-col gap-1 mt-2' });
-  for (const step of INV_SEQUENCE) {
-    seqBox.append(el('label', { class: 'flex items-center gap-2 cursor-pointer text-[0.82rem]' }, [
-      el('input', { type: 'checkbox', checked: SPEC.groups.invariance.sequence.includes(step), style: { accentColor: 'var(--ochre)' }, onchange: (e) => { toggleStep(step, e.target.checked); updatePreview(); } }),
-      INV_META[step].label,
+function renderTimeMode(host) {
+  const L = SPEC.longitudinal;
+  // wave labels + indicator pickers (Time-1 columns drive the Λ grid; Time-2 are positionally matched)
+  [0, 1].forEach((idx) => {
+    const labelInput = el('input', { value: L.waveLabels[idx] || '', class: 'w-28 px-2 py-1 rounded text-[0.8rem]', style: { border: '1px solid var(--line)', background: 'var(--surface)' }, oninput: (e) => { L.waveLabels[idx] = e.target.value || (idx ? 'Time 2' : 'Time 1'); updatePreview(); } });
+    host.append(el('div', { class: 'flex items-center gap-2 mt-3' }, [
+      el('span', { class: 'text-[0.78rem] font-semibold', style: { color: 'var(--petrol)' } }, idx ? 'Time 2' : 'Time 1'),
+      el('span', { class: 'text-[0.74rem]', style: { color: 'var(--ink-faint)' } }, 'label'), labelInput,
     ]));
+    host.append(wavePicker(idx));
+  });
+  host.append(el('label', { class: 'flex items-center gap-2.5 cursor-pointer mt-3' }, [
+    el('input', { type: 'checkbox', checked: L.correlatedUniqueness, style: { accentColor: 'var(--petrol)' }, onchange: (e) => { L.correlatedUniqueness = e.target.checked; updatePreview(); } }),
+    el('span', {}, [
+      el('span', { class: 'text-[0.84rem] font-semibold', style: { color: 'var(--ink)' } }, 'Correlated uniquenesses'),
+      el('span', { class: 'block text-[0.76rem]', style: { color: 'var(--ink-faint)' } }, 'Correlate each indicator’s residual across the two waves (recommended).'),
+    ]),
+  ]));
+}
+
+// Indicator chips for one wave; a column used in the other wave is disabled (waves must be disjoint).
+function wavePicker(waveIdx) {
+  const L = SPEC.longitudinal;
+  const mine = new Set(L.waves[waveIdx]);
+  const other = new Set(L.waves[1 - waveIdx]);
+  const box = el('div', { class: 'flex flex-wrap gap-1.5 mt-1' });
+  for (const v of SPEC.data.varNames) {
+    const disabled = other.has(v);
+    const on = mine.has(v);
+    box.append(el('button', {
+      class: 'chip', disabled,
+      style: {
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? '0.3' : '1',
+        ...(on ? { background: 'var(--petrol)', color: '#EAF3F1', borderColor: 'transparent' } : { background: 'var(--surface)', color: 'var(--ink-faint)', borderColor: 'var(--line)' }),
+      },
+      onclick: disabled ? undefined : () => {
+        const next = new Set(mine); if (on) next.delete(v); else next.add(v);
+        setWaveItems(SPEC, waveIdx, SPEC.data.varNames.filter((x) => next.has(x)));
+        refresh();
+      },
+    }, v));
   }
-  host.append(el('p', { class: 'text-[0.78rem] mt-3 mb-1', style: { color: 'var(--ink-faint)' } }, 'Invariance steps (in order)'), seqBox);
-  host.append(el('p', { class: 'text-[0.76rem] mt-3 px-3 py-2 rounded-lg', style: { background: 'var(--petrol-tint)', color: 'var(--petrol-deep)' } },
-    'With grouping on, “Generate syntax” produces this invariance sequence (using the ESEM measurement model above), one .inp per step.'));
+  return box;
+}
+
+// Switch invariance mode, keeping groups/longitudinal mutually exclusive and seeding sensible defaults.
+function setInvMode(mode) {
+  if (mode === 'time') {
+    SPEC.groups.enabled = false;
+    SPEC.longitudinal.enabled = true;
+    const L = SPEC.longitudinal;
+    if (!L.waves[0]?.length) L.waves[0] = SPEC.items.slice();
+    if (!L.waves[1]?.length) {
+      const used = new Set(L.waves[0]);
+      L.waves[1] = SPEC.data.varNames.filter((v) => !used.has(v)).slice(0, L.waves[0].length);
+    }
+    setWaveItems(SPEC, 0, L.waves[0]); // bind the Λ grid / factors to the Time-1 indicators
+    if (!L.invariance.sequence?.length) L.invariance.sequence = INV_SEQUENCE.slice();
+  } else {
+    SPEC.longitudinal.enabled = false;
+    SPEC.groups.enabled = true;
+    const avail = SPEC.data.varNames.filter((v) => !SPEC.items.includes(v));
+    if (!SPEC.groups.variable && avail.length) pickGroupVar(avail[0]);
+  }
 }
 function pickGroupVar(v) {
   SPEC.groups.variable = v;
@@ -273,10 +362,10 @@ function pickGroupVar(v) {
   SPEC.groups.codes = vals.length ? vals.map((x) => ({ code: String(x.value), label: `group${x.value}` })) : [{ code: '1', label: 'group1' }, { code: '2', label: 'group2' }];
   if (!SPEC.groups.invariance.sequence?.length) SPEC.groups.invariance.sequence = INV_SEQUENCE.slice();
 }
-function toggleStep(step, on) {
-  let seq = SPEC.groups.invariance.sequence.filter((s) => s !== step);
+function toggleStep(seqHolder, step, on) {
+  let seq = seqHolder.sequence.filter((s) => s !== step);
   if (on) { seq.push(step); seq = INV_SEQUENCE.filter((s) => seq.includes(s)); }
-  SPEC.groups.invariance.sequence = seq;
+  seqHolder.sequence = seq;
 }
 
 function syncSegmented(id, current) {
@@ -358,7 +447,8 @@ function renderConcept(activeKey) {
   const models = requestedModels(SPEC);
   if (!models.length) { host.innerHTML = '<p style="color:var(--ink-faint);font-size:0.84rem;margin:0">Select a model above to see its structure.</p>'; return; }
   const key = activeKey || models[0].key;
-  const modelType = key.startsWith('inv:') ? 'esem' : key;   // invariance uses the ESEM measurement model
+  // invariance uses the ESEM measurement model; longitudinal keys carry their model type (linv:<mt>:<step>)
+  const modelType = key.startsWith('linv:') ? key.split(':')[1] : key.startsWith('inv:') ? 'esem' : key;
   host.innerHTML = conceptDiagramSVG(SPEC, modelType, { showResiduals: false });
 }
 

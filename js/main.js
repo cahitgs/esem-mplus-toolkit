@@ -249,6 +249,7 @@ async function addOutFiles(fileList) {
 }
 
 function deriveLabel(p, fileName) {
+  if (p.invStep) return p.invStep; // longitudinal step name parsed from the TITLE
   const t = p.title || '';
   const inv = t.match(/invariance\s*[-:]\s*(.+)/i);
   if (inv) return inv[1].trim();
@@ -291,9 +292,35 @@ function renderResultsOutput() {
   bar.append(el('button', { class: 'btn btn-accent', onclick: () => exportDocx(appState.parsed, { factorLabels: exportLabels }) }, 'Download .docx'));
   out.append(bar);
 
-  // Separate multi-group (invariance) models from single-group models.
-  const multi = appState.parsed.filter((m) => (m.parsed.nGroups || 1) > 1).sort((a, b) => (a.parsed.fit.df ?? 0) - (b.parsed.fit.df ?? 0));
-  const single = appState.parsed.filter((m) => (m.parsed.nGroups || 1) <= 1);
+  // Route parsed outputs three ways: longitudinal invariance sequences (single-group, recognized by
+  // TITLE), multi-group invariance (nGroups > 1), and plain single-group models.
+  const byDf = (a, b) => (a.parsed.fit.df ?? 0) - (b.parsed.fit.df ?? 0);
+  const longi = appState.parsed.filter((m) => m.parsed.invKind === 'longitudinal');
+  const multi = appState.parsed.filter((m) => m.parsed.invKind !== 'longitudinal' && (m.parsed.nGroups || 1) > 1).sort(byDf);
+  const single = appState.parsed.filter((m) => m.parsed.invKind !== 'longitudinal' && (m.parsed.nGroups || 1) <= 1);
+
+  // Longitudinal: one comparison table per measurement model (ESEM vs CFA), least→most constrained.
+  const renderLongiBlock = (models, modelLabel) => {
+    if (!models.length) return;
+    const set = models.slice().sort(byDf);
+    const cap = `Tests of longitudinal measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`;
+    const card = el('div', { class: 'surface p-6 mb-6 apa' });
+    card.innerHTML = renderInvarianceTable(set, { caption: cap, longitudinal: true });
+    out.append(card);
+    const prose = renderInvarianceProse(set, { longitudinal: true });
+    if (prose) {
+      const c = el('div', { class: 'surface p-6 mb-6 apa' });
+      c.innerHTML = `<div class="eyebrow mb-3" style="font-family:var(--font-mono)">Suggested APA text — longitudinal invariance${modelLabel ? ` (${modelLabel})` : ''}</div>` + prose;
+      out.append(c);
+    }
+  };
+  if (longi.length) {
+    const esem = longi.filter((m) => m.parsed.invModel !== 'cfa');
+    const cfa = longi.filter((m) => m.parsed.invModel === 'cfa');
+    // Only tag the model when both kinds are present; a single sequence needs no qualifier.
+    renderLongiBlock(esem, cfa.length ? 'ESEM' : '');
+    renderLongiBlock(cfa, esem.length ? 'CFA' : '');
+  }
 
   if (multi.length) {
     const invCard = el('div', { class: 'surface p-6 mb-6 apa' });

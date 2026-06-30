@@ -5,7 +5,7 @@
 //   CFA:          (no ROTATION)                      MODEL: Fj BY <its main items>;
 // Mplus truncates input lines > 90 chars, so token lists are wrapped < 88.
 
-import { factorIds, mainItemsForFactor } from './state.js';
+import { factorIds, mainItemsForFactor, waveCounterpart } from './state.js';
 
 const WRAP = 86;
 
@@ -65,7 +65,7 @@ function rotationLine(spec) {
   return `ROTATION=GEOMIN(${kind}${fmtEpsilon(spec.rotation.epsilon)});`;
 }
 
-function headerBlocks(spec, { rotation, rotationOverride, iterations } = {}) {
+function headerBlocks(spec, { rotation, rotationOverride, iterations, useVars } = {}) {
   // Point at the Mplus-ready .dat (space-delimited, no header) the app exports — the original
   // upload may be a semicolon CSV or carry a header, which Mplus cannot read directly.
   const file = spec.data.mplusFile || spec.data.fileName || 'data.dat';
@@ -76,10 +76,11 @@ function headerBlocks(spec, { rotation, rotationOverride, iterations } = {}) {
   lines.push(fileLine.length > WRAP ? `FILE =\n"${file}";` : fileLine);
   lines.push('VARIABLE:');
   lines.push(stmt(['NAMES ARE', ...spec.data.varNames]));
-  lines.push(stmt(['USEVARIABLES ARE', ...spec.items]));
+  lines.push(stmt(['USEVARIABLES ARE', ...(useVars || spec.items)])); // longitudinal passes both waves' items
   if (spec.data.categorical?.length) lines.push(stmt(['CATEGORICAL ARE', ...spec.data.categorical]));
   if (spec.data.missingCode != null && spec.data.missingCode !== '') lines.push(`MISSING ARE ALL (${spec.data.missingCode});`);
-  if (spec.groups?.enabled && spec.groups.variable) {
+  // Longitudinal models are single-group (explicit useVars): never emit a GROUPING line for them.
+  if (!useVars && spec.groups?.enabled && spec.groups.variable) {
     const codes = spec.groups.codes.map((c) => `${c.code} = ${c.label}`).join(' ');
     lines.push(`GROUPING IS ${spec.groups.variable} (${codes});`);
   }
@@ -256,8 +257,109 @@ function buildInvariance(spec, step) {
   return lines.join('\n') + '\n';
 }
 
+// ---------- Longitudinal (2-wave, within-person) measurement invariance ----------
+// Single group, two measurement blocks (one per wave) sharing ONE factor pattern. Loadings are
+// equated across waves via the ESEM block flag "(*tN 1)" (Morin et al.) or, for CFA, via shared BY
+// labels. Residual & intercept invariance reuse chunkLabeled, whose labels are POSITION-based
+// (i1-i6 / u1-u6) and therefore identical for both waves → cross-wave equality for free. Each
+// indicator's residual is correlated across the two waves with PWITH. The app's CUMULATIVE step
+// order (configural→metric→scalar→strict→varcov→latentmean) reproduces Morin's per-block syntax but
+// bundles it so df increases monotonically for the comparison table (his M-numbering is not cumulative).
+function longRanges(k) {
+  return { t1: k > 1 ? `F1-F${k}` : 'F1', t2: k > 1 ? `F${k + 1}-F${2 * k}` : `F${k + 1}` };
+}
+// Correlated uniquenesses across waves: one "WITH" per matching indicator. Equivalent to Mplus
+// PWITH, but PWITH requires its two lists to stay on a single line — they break ("mismatched
+// variables for PWITH") once wrapped for many indicators — so we emit explicit pairwise statements,
+// which are robust for any indicator count and stay well under the 90-char limit.
+function pwithLines(a, b) { return a.map((it, i) => `${it} WITH ${b[i]};`); }
+// Cross-sectional factor covariance equality: each matching within-wave pair shares one label.
+function longCovLabels(k) {
+  const out = [];
+  let c = 1;
+  for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
+    out.push(`F${i + 1} WITH F${j + 1} (lcov${c});`);
+    out.push(`F${k + i + 1} WITH F${k + j + 1} (lcov${c});`);
+    c++;
+  }
+  return out;
+}
+// Which cumulative constraints a step adds (shared by the ESEM and CFA builders).
+function longFlags(step) {
+  return {
+    equate: step !== 'configural',                                          // loadings equal across waves
+    residuals: step === 'strict' || step === 'varcov' || step === 'latentmean',
+    intercepts: step === 'scalar' || step === 'strict' || step === 'varcov' || step === 'latentmean',
+    varcov: step === 'varcov' || step === 'latentmean',                     // T2 var refixed @1 + cov equal
+    meanFix: step === 'latentmean',                                         // T2 latent means refixed @0
+  };
+}
+// Intercept / mean lines common to both builders (only when intercepts are equated).
+function longInterceptMeanLines(t1, t2, t1r, t2r, meanFix) {
+  return [
+    chunkLabeled(t1, 'i', true), chunkLabeled(t2, 'i', true), // [..] (i1-i6) on both waves → equal intercepts
+    `[${t1r}@0];`,                                            // Time-1 latent means fixed (identification)
+    meanFix ? `[${t2r}@0];` : `[${t2r}];`,                    // free Time-2 means (refix @0 for the mean test)
+  ];
+}
+
+function buildLongInvarianceESEM(spec, step) {
+  const [t1, t2] = spec.longitudinal.waves;
+  const k = spec.factors.length;
+  const { t1: t1r, t2: t2r } = longRanges(k);
+  const f = longFlags(step);
+  const lines = [
+    ...titleLine(`Longitudinal invariance - ${INV_META[step].label}`),
+    ...headerBlocks(spec, { rotation: true, iterations: 10000, useVars: [...t1, ...t2] }),
+    'MODEL:',
+    stmt([`${t1r} BY`, ...t1, `(*t1${f.equate ? ' 1' : ''})`]),
+    stmt([`${t2r} BY`, ...t2, `(*t2${f.equate ? ' 1' : ''})`]),
+  ];
+  if (f.residuals) { lines.push(chunkLabeled(t1, 'u', false)); lines.push(chunkLabeled(t2, 'u', false)); }
+  if (f.varcov) { lines.push(`${t2r}@1;`); lines.push(...longCovLabels(k)); } // T1 vars @1 by ESEM default
+  if (f.intercepts) lines.push(...longInterceptMeanLines(t1, t2, t1r, t2r, f.meanFix));
+  if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
+  lines.push(...outputBlock(spec));
+  return lines.join('\n') + '\n';
+}
+
+function buildLongInvarianceCFA(spec, step) {
+  const [t1, t2] = spec.longitudinal.waves;
+  const k = spec.factors.length;
+  const { t1: t1r, t2: t2r } = longRanges(k);
+  const f = longFlags(step);
+  const lines = [
+    ...titleLine(`Longitudinal invariance (CFA) - ${INV_META[step].label}`),
+    ...headerBlocks(spec, { rotation: false, useVars: [...t1, ...t2] }),
+    'MODEL:',
+  ];
+  // BY lines, standardized-factor identification (first loading free *). Loadings are equated
+  // across waves via shared labels (Lf_p). Mplus rejects inline per-item labels on one BY line
+  // ("F1 BY X1* (L1_1) X2 ..."), so when labelling we emit ONE BY statement per loading. Time-1
+  // factors (F1..Fk) are defined BEFORE Time-2 factors (F(k+1)..F2k) so the "F1-Fk"/"F(k+1)-F2k"
+  // range syntax used below for variances/means stays contiguous in Mplus factor order.
+  const byLines = (fNum, items, fi) => {
+    if (!f.equate) return [stmt([`F${fNum} BY`, ...items.map((it, p) => (p === 0 ? `${it}*` : it))])];
+    return items.map((it, p) => stmt([`F${fNum} BY`, p === 0 ? `${it}*` : it, `(L${fi + 1}_${p + 1})`]));
+  };
+  spec.factors.forEach((fac, fi) => lines.push(...byLines(fi + 1, mainItemsForFactor(spec, fac.id), fi)));
+  spec.factors.forEach((fac, fi) => lines.push(...byLines(k + fi + 1, mainItemsForFactor(spec, fac.id).map((it) => waveCounterpart(spec, it)), fi)));
+  lines.push(`${t1r}@1;`);                                    // Time-1 factor variances fix the metric
+  if (!f.equate || f.varcov) lines.push(`${t2r}@1;`);         // T2 vars: @1 at configural & varcov+, else free
+  if (f.residuals) { lines.push(chunkLabeled(t1, 'u', false)); lines.push(chunkLabeled(t2, 'u', false)); }
+  if (f.varcov) lines.push(...longCovLabels(k));
+  if (f.intercepts) lines.push(...longInterceptMeanLines(t1, t2, t1r, t2r, f.meanFix));
+  if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
+  lines.push(...outputBlock(spec));
+  return lines.join('\n') + '\n';
+}
+
 /** Dispatch. */
 export function buildInp(spec, modelType) {
+  if (modelType.startsWith('linv:')) {
+    const [, mt, step] = modelType.split(':');
+    return mt === 'cfa' ? buildLongInvarianceCFA(spec, step) : buildLongInvarianceESEM(spec, step);
+  }
   if (modelType.startsWith('inv:')) return buildInvariance(spec, modelType.slice(4));
   switch (modelType) {
     case 'cfa': return buildCFA(spec);
@@ -270,6 +372,21 @@ export function buildInp(spec, modelType) {
 
 /** Which models the spec asks for, in display order. */
 export function requestedModels(spec) {
+  // Longitudinal invariance: single-group ESEM and/or CFA sequence across two waves.
+  if (spec.longitudinal?.enabled && spec.longitudinal.waves?.[0]?.length) {
+    const seq = spec.longitudinal.invariance.sequence || INV_SEQUENCE;
+    const want = [];
+    if (spec.modelTypes.esem) want.push('esem');
+    if (spec.modelTypes.cfa) want.push('cfa');
+    if (!want.length) want.push('esem');
+    const out = [];
+    for (const mt of want) seq.forEach((step, i) => out.push({
+      key: `linv:${mt}:${step}`, step, modelType: mt,
+      label: `${mt === 'cfa' ? 'CFA' : 'ESEM'} · ${INV_META[step].label}`,
+      file: `LongInv_${mt}_${i + 1}_${step}.inp`,
+    }));
+    return out;
+  }
   // Measurement-invariance workflow: when grouping is on, generate the invariance sequence.
   if (spec.groups?.enabled && spec.groups.variable) {
     return (spec.groups.invariance.sequence || INV_SEQUENCE).map((step, i) => ({

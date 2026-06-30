@@ -5,10 +5,17 @@
 import { apaNum, apaP, toast, downloadBlob } from './ui.js';
 import { sbChiSqDiff, invarianceDecision } from './apa-render.js';
 
-const splitGroups = (models) => ({
-  multi: models.filter((m) => (m.parsed.nGroups || 1) > 1).sort((a, b) => (a.parsed.fit.df ?? 0) - (b.parsed.fit.df ?? 0)),
-  single: models.filter((m) => (m.parsed.nGroups || 1) <= 1),
-});
+const byDf = (a, b) => (a.parsed.fit.df ?? 0) - (b.parsed.fit.df ?? 0);
+const splitGroups = (models) => {
+  const longi = models.filter((m) => m.parsed.invKind === 'longitudinal');
+  const rest = models.filter((m) => m.parsed.invKind !== 'longitudinal');
+  return {
+    longiEsem: longi.filter((m) => m.parsed.invModel !== 'cfa').sort(byDf),
+    longiCfa: longi.filter((m) => m.parsed.invModel === 'cfa').sort(byDf),
+    multi: rest.filter((m) => (m.parsed.nGroups || 1) > 1).sort(byDf),
+    single: rest.filter((m) => (m.parsed.nGroups || 1) <= 1),
+  };
+};
 
 function invRows(models) {
   const head = ['Model', 'χ²', 'df', 'CFI', 'TLI', 'RMSEA [90% CI]', 'ΔCFI', 'ΔRMSEA', 'Decision'];
@@ -19,13 +26,18 @@ function invRows(models) {
   });
   return { head, body };
 }
-function invProseText(models) {
+function invProseText(models, { longitudinal = false } = {}) {
   if (models.length < 2) return [];
+  const over = longitudinal ? 'across the two time points' : 'across groups';
   const sup = [], fail = [];
   models.forEach((m, i) => { if (i === 0) { sup.push(m.label); return; } const d = invarianceDecision(models[i - 1].parsed.fit, m.parsed.fit); if (d.ok) sup.push(m.label); else fail.push({ m, d }); });
-  if (!fail.length) return [`All invariance constraints were tenable across groups (ΔCFI ≥ −.010, ΔRMSEA ≤ .015), supporting full measurement invariance.`];
+  if (!fail.length) return [`All invariance constraints were tenable ${over} (ΔCFI ≥ −.010, ΔRMSEA ≤ .015), supporting full measurement invariance.`];
   const f = fail[0];
   return [`Measurement invariance held up to the ${sup[sup.length - 1].toLowerCase()} level, but ${f.m.label.toLowerCase()} invariance was not supported (ΔCFI = ${signed(f.d.dcfi)}, ΔRMSEA = ${signed(f.d.drmsea)}).`];
+}
+// Longitudinal note string for the invariance table (Word + .docx).
+function longiNote(models, modelLabel) {
+  return `N = ${models[0]?.parsed.nObs ?? '—'} across two time points${modelLabel ? ` (${modelLabel})` : ''}. Invariance supported when ΔCFI ≥ −.010 and ΔRMSEA ≤ .015 (Chen, 2007).`;
 }
 
 const f2 = (x) => apaNum(x, 2, false);
@@ -87,7 +99,7 @@ function loadingRows(p, target) {
 // Word clipboard (HTML)
 // ----------------------------------------------------------------------------
 function buildWordHtml(models, { factorLabels = {} } = {}) {
-  const { multi, single } = splitGroups(models);
+  const { longiEsem, longiCfa, multi, single } = splitGroups(models);
   const lbl = (p, fid) => (factorLabels[fid] || fid);
   const TBL = 'border-collapse:collapse;font-family:Calibri,sans-serif;font-size:11pt;margin:6pt 0;';
   const top = 'border-top:1.5pt solid #000;', bot = 'border-bottom:1.5pt solid #000;', hbot = 'border-bottom:0.75pt solid #000;';
@@ -97,6 +109,16 @@ function buildWordHtml(models, { factorLabels = {} } = {}) {
     body.forEach((r, ri) => { h += `<tr>${r.map((c, i) => `<td style="padding:3pt 8pt;text-align:${i ? 'right' : 'left'};${ri === body.length - 1 ? bot : ''}">${c}</td>`).join('')}</tr>`; });
     return h + `</table><p style="font-size:9pt;margin:2pt 0 10pt"><i>Note.</i> ${note}</p>`;
   };
+
+  // longitudinal invariance table(s) (single-group sequence, one per measurement model)
+  let longi = '';
+  const longiTable = (set, modelLabel) => {
+    if (!set.length) return;
+    const ir = invRows(set);
+    longi += simpleTable(`Table. Tests of longitudinal measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`, ir.head, ir.body, longiNote(set, modelLabel));
+  };
+  longiTable(longiEsem, longiCfa.length ? 'ESEM' : '');
+  longiTable(longiCfa, longiEsem.length ? 'CFA' : '');
 
   // invariance table (multi-group)
   let inv = '';
@@ -118,9 +140,9 @@ function buildWordHtml(models, { factorLabels = {} } = {}) {
     loads += `</table><p style="font-size:9pt;margin:2pt 0 6pt"><i>Note.</i> Target loadings in <b>bold</b>; δ = uniqueness; ω = composite reliability.</p>`;
   }
 
-  const proseParts = [...proseText(single), ...invProseText(multi)];
+  const proseParts = [...invProseText(longiEsem, { longitudinal: true }), ...invProseText(longiCfa, { longitudinal: true }), ...proseText(single), ...invProseText(multi)];
   const prose = proseParts.map((t) => `<p style="font-family:Calibri;font-size:11pt;line-height:1.5;margin:6pt 0">${t}</p>`).join('');
-  return `<html><head><meta charset="utf-8"></head><body>${inv}${fit}${loads}<h3 style="font-family:Calibri">Suggested text</h3>${prose}</body></html>`;
+  return `<html><head><meta charset="utf-8"></head><body>${longi}${inv}${fit}${loads}<h3 style="font-family:Calibri">Suggested text</h3>${prose}</body></html>`;
 }
 
 export async function copyResultsToWord(models, opts) {
@@ -190,7 +212,7 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
   const note = (t) => new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: t, font: 'Calibri', size: 16 })] });
   const para = (t) => new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: t, font: 'Calibri', size: 22 })] });
 
-  const { multi, single } = splitGroups(models);
+  const { longiEsem, longiCfa, multi, single } = splitGroups(models);
   const mkTable = (rows) => {
     const header = new TableRow({ children: rows.head.map((h, i) => headCell(h, i ? 'right' : 'left')) });
     const body = rows.body.map((r, ri) => new TableRow({ children: r.map((c, i) => tc(c, { align: i ? 'right' : 'left', botB: ri === rows.body.length - 1 })) }));
@@ -198,6 +220,14 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
   };
 
   const blocks = [new Paragraph({ children: [new TextRun({ text: 'ESEM results', bold: true, font: 'Calibri', size: 28 })], spacing: { after: 120 } })];
+
+  // longitudinal invariance table(s) (single-group sequence, one per measurement model)
+  const longiBlock = (set, modelLabel) => {
+    if (!set.length) return;
+    blocks.push(italic(`Table. Tests of longitudinal measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`), mkTable(invRows(set)), note(`Note. ${longiNote(set, modelLabel)}`));
+  };
+  longiBlock(longiEsem, longiCfa.length ? 'ESEM' : '');
+  longiBlock(longiCfa, longiEsem.length ? 'CFA' : '');
 
   // invariance table (multi-group)
   if (multi.length) blocks.push(italic('Table. Tests of measurement invariance'), mkTable(invRows(multi)), note(`Note. N = ${multi[0]?.parsed.nObs ?? '—'} across ${multi[0]?.parsed.nGroups ?? 2} groups. Invariance supported when ΔCFI ≥ −.010 and ΔRMSEA ≤ .015 (Chen, 2007).`));
@@ -218,7 +248,7 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
   }
 
   blocks.push(new Paragraph({ children: [new TextRun({ text: 'Suggested text', bold: true, font: 'Calibri', size: 24 })], spacing: { before: 200, after: 80 } }));
-  for (const t of [...proseText(single), ...invProseText(multi)]) blocks.push(para(t));
+  for (const t of [...invProseText(longiEsem, { longitudinal: true }), ...invProseText(longiCfa, { longitudinal: true }), ...proseText(single), ...invProseText(multi)]) blocks.push(para(t));
 
   const doc = new Document({ sections: [{ children: blocks }] });
   return Packer.toBlob(doc);

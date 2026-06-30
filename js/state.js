@@ -15,6 +15,16 @@ export function createModelSpec(data) {
     modelTypes: { cfa: true, esem: true, bifactorCfa: false, bifactorEsem: false },
     bifactor: { gLabel: 'G' },
     groups: { enabled: false, variable: null, codes: [], invariance: { sequence: ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'] } },
+    // Longitudinal (within-person, 2-wave) invariance: single group, two ESEM/CFA blocks sharing one
+    // factor pattern. waves[0]=Time 1 columns drive the Λ grid (= spec.items); waves[1]=Time 2 columns
+    // are positionally matched (waves[1][k] is the same indicator as waves[0][k], measured again).
+    longitudinal: {
+      enabled: false,
+      waveLabels: ['Time 1', 'Time 2'],
+      waves: [[], []],
+      correlatedUniqueness: true, // emit "T1items PWITH T2items" (same indicator's residual across waves)
+      invariance: { sequence: ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'] },
+    },
     output: { line: 'SAMPSTAT STANDARDIZED RESIDUAL CINTERVAL MODINDICES (3.0) TECH2 TECH4' },
   };
   setFactorCount(spec, 2);
@@ -65,6 +75,19 @@ export function setItems(spec, items) {
   return spec;
 }
 
+/** Assign a wave's indicator columns. Wave 0 (Time 1) drives the shared Λ pattern / factors / target. */
+export function setWaveItems(spec, waveIdx, cols) {
+  spec.longitudinal.waves[waveIdx] = cols.slice();
+  if (waveIdx === 0) setItems(spec, cols.slice()); // T1 columns ARE the shared item set / Λ grid
+  return spec;
+}
+
+/** The Time-2 indicator positionally matching a Time-1 item (used by the CFA longitudinal builder). */
+export function waveCounterpart(spec, t1item) {
+  const i = spec.longitudinal.waves[0].indexOf(t1item);
+  return i < 0 ? null : spec.longitudinal.waves[1][i];
+}
+
 export function toggleTarget(spec, item, factorId) {
   spec.target[item] = spec.target[item] || {};
   spec.target[item][factorId] = !spec.target[item][factorId];
@@ -105,6 +128,17 @@ export function validateSpec(spec) {
     if ((spec.groups.codes?.length || 0) < 2) errors.push('The grouping variable needs at least two groups.');
     if ((spec.groups.invariance.sequence?.length || 0) === 0) errors.push('Select at least one invariance step (start with Configural).');
     if (spec.data.categorical.length) warnings.push('Categorical invariance constrains thresholds rather than intercepts; review the generated syntax before use.');
+  }
+
+  if (spec.longitudinal?.enabled) {
+    const [w1, w2] = spec.longitudinal.waves;
+    if (spec.groups.enabled) errors.push('Run either multi-group or longitudinal invariance, not both at once.');
+    if ((w1?.length || 0) < 2 || (w2?.length || 0) < 2) errors.push('Assign at least two indicators to each time point.');
+    else if (w1.length !== w2.length) errors.push(`Each wave needs the same number of indicators (Time 1 has ${w1.length}, Time 2 has ${w2.length}).`);
+    const overlap = (w1 || []).filter((x) => (w2 || []).includes(x));
+    if (overlap.length) errors.push(`Time 1 and Time 2 must use different columns (shared: ${overlap.join(', ')}).`);
+    if ((spec.longitudinal.invariance.sequence?.length || 0) === 0) errors.push('Select at least one invariance step (start with Configural).');
+    // (factor-count and ≥2-target-per-factor checks above already apply: spec.items === Time-1 columns.)
   }
   return { errors, warnings };
 }
