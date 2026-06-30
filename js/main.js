@@ -505,7 +505,7 @@ async function devBootstrap(which) {
   }
 }
 
-// Public demo mode: load the bundled 4-factor example .out files straight into Results so a
+// Public demo mode: load the bundled 3-factor example .out files straight into Results so a
 // first-time visitor sees real APA tables, diagrams, and the ESEM-within-CFA card in one click.
 // (Distinct from the developer-only `?dev=` fixtures.)
 const DEMO_SETS = {
@@ -519,8 +519,8 @@ const DEMO_SETS = {
   invariance: ['inv_1_configural.out', 'inv_2_metric.out', 'inv_3_scalar.out', 'inv_4_strict.out', 'inv_5_varcov.out', 'inv_6_latentmean.out'],
 };
 async function demoBootstrap(which) {
-  // Model / Syntax: rebuild the 4-factor example spec from the bundled data file so the
-  // builder and the generated syntax are shown on the same 24-item / 4-factor example.
+  // Model / Syntax: rebuild the 3-factor example spec from the bundled data file so the
+  // builder and the generated syntax are shown on the same 15-item / 3-factor example.
   if (which === 'model' || which === 'syntax') {
     try {
       const text = await fetch('example-dataset/data.dat').then((r) => r.text());
@@ -537,10 +537,10 @@ async function demoBootstrap(which) {
       appState.spec = spec;
       unlock('model'); mountModelBuilder($('#model-host'), spec, { onChange: onModelChange });
       if (which === 'syntax') { unlock('syntax'); renderSyntaxStep(); goStep('syntax'); }
-    } catch { toast('Demo: could not load veri.dat', 'err'); }
+    } catch { toast('Demo: could not load data.dat', 'err'); }
     return;
   }
-  // Results: load the bundled 4-factor .out files straight into Results.
+  // Results: load the bundled 3-factor .out files straight into Results.
   appState.reached.model = appState.reached.syntax = true;
   unlock('results'); renderResultsStep();
   const files = DEMO_SETS[which] || DEMO_SETS.results;
