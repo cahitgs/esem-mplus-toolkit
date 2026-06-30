@@ -516,6 +516,28 @@ const DEMO_SETS = {
   invariance: ['inv_1_configural.out', 'inv_2_metric.out', 'inv_3_scalar.out', 'inv_4_strict.out', 'inv_5_varcov.out', 'inv_6_latentmean.out'],
 };
 async function demoBootstrap(which) {
+  // Model / Syntax: rebuild the 4-factor example spec from the bundled data file so the
+  // builder and the generated syntax are shown on the same 24-item / 4-factor example.
+  if (which === 'model' || which === 'syntax') {
+    try {
+      const text = await fetch('example-dataset/veri.dat').then((r) => r.text());
+      const data = parseDataFile(text, 'veri.dat');
+      data.varNames = Array.from({ length: 24 }, (_, i) => 'M' + (i + 1)).concat('GRP');
+      data.mplusFile = 'veri.dat';
+      appState.data = data;
+      const spec = createModelSpec(data);
+      spec.items = data.varNames.slice(0, 24);
+      spec.factors = [1, 2, 3, 4].map((i) => ({ id: 'F' + i, label: 'F' + i }));
+      spec.target = {};
+      spec.items.forEach((it, i) => { spec.target[it] = {}; spec.factors.forEach((f, fi) => { spec.target[it][f.id] = fi === Math.floor(i / 6); }); });
+      spec.rotation = { type: 'GEOMIN', oblique: true, epsilon: 0.5 };
+      appState.spec = spec;
+      unlock('model'); mountModelBuilder($('#model-host'), spec, { onChange: onModelChange });
+      if (which === 'syntax') { unlock('syntax'); renderSyntaxStep(); goStep('syntax'); }
+    } catch { toast('Demo: could not load veri.dat', 'err'); }
+    return;
+  }
+  // Results: load the bundled 4-factor .out files straight into Results.
   appState.reached.model = appState.reached.syntax = true;
   unlock('results'); renderResultsStep();
   const files = DEMO_SETS[which] || DEMO_SETS.results;
