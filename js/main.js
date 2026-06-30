@@ -357,19 +357,31 @@ function renderEwcCard(m) {
     const inp = buildEwcInp(model, { referents: refs, title: model.isBifactor ? 'Bifactor-ESEM-within-CFA' : 'ESEM-within-CFA' });
     pre.textContent = inp;
     const fixed = fixedCrossCount(model, refs), need = model.factors.length * (model.factors.length - 1);
-    note.textContent = `${fixed} cross-loadings fixed to identify the rotation (m(m−1) = ${need}). Factor variances fixed to 1${model.isBifactor ? '; factor correlations fixed to 0' : ''}. Run this in Mplus, then drop its .out back here for APA tables.`;
+    const identified = fixed === need;
+    note.style.color = identified ? 'var(--ink-faint)' : 'var(--ochre)';
+    note.textContent = identified
+      ? `${fixed} cross-loadings fixed to identify the rotation (m(m−1) = ${need}). Factor variances fixed to 1${model.isBifactor ? '; factor correlations fixed to 0' : ''}. Run this in Mplus, then drop its .out back here for APA tables.`
+      : `⚠ Only ${fixed} of the ${need} cross-loadings are fixed — give each factor a distinct referent, or the model is under-identified.`;
     card._ewcInp = inp;
   };
 
-  for (const f of model.factors) {
-    const sel = el('select', {
-      class: 'px-2.5 py-1.5 rounded text-[0.84rem]', style: { border: '1px solid var(--line-strong)', background: 'var(--surface)' },
-      'aria-label': `Referent for ${f}`,
-      onchange: (e) => { refs[f] = e.target.value; refresh(); },
-    }, model.items.map((it) => el('option', { value: it, selected: refs[f] === it }, it)));
-    pickRow.append(el('label', { class: 'flex items-center gap-2 text-[0.84rem]', style: { color: 'var(--ink-soft)' } },
-      [el('span', { style: { fontFamily: 'var(--font-mono)' } }, `${fLabel(f)} referent:`), sel]));
-  }
+  // Each factor needs its OWN referent: an item used as referent for one factor is disabled in
+  // the other dropdowns, so the user can never pick duplicates (which would drop the model below
+  // m(m−1) fixed cross-loadings and leave it under-identified). Rebuilt on every change.
+  const buildPickers = () => {
+    pickRow.innerHTML = '';
+    for (const f of model.factors) {
+      const usedByOthers = new Set(model.factors.filter((o) => o !== f).map((o) => refs[o]));
+      const sel = el('select', {
+        class: 'px-2.5 py-1.5 rounded text-[0.84rem]', style: { border: '1px solid var(--line-strong)', background: 'var(--surface)' },
+        'aria-label': `Referent for ${f}`,
+        onchange: (e) => { refs[f] = e.target.value; buildPickers(); refresh(); },
+      }, model.items.map((it) => el('option', { value: it, selected: refs[f] === it, disabled: usedByOthers.has(it) }, it)));
+      pickRow.append(el('label', { class: 'flex items-center gap-2 text-[0.84rem]', style: { color: 'var(--ink-soft)' } },
+        [el('span', { style: { fontFamily: 'var(--font-mono)' } }, `${fLabel(f)} referent:`), sel]));
+    }
+  };
+  buildPickers();
   card.append(pickRow);
   card.append(pre);
   card.append(note);
