@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { createModelSpec, setWaveItems, setFactorCount, validateSpec } from '../js/state.js';
 import { buildInp, requestedModels, maxLineLength } from '../js/syntax-generator.js';
 import { parseOut } from '../js/out-parser.js';
-import { invarianceDecision } from '../js/apa-render.js';
+import { invarianceDecision, renderInvarianceTable } from '../js/apa-render.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fx = (name) => readFileSync(join(HERE, 'fixtures', name), 'utf8');
@@ -124,6 +124,8 @@ console.log('\n— real Mplus fixtures: bifactor-ESEM sequence (clean invariant 
 const BSTEPS = ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'];
 const besemFx = Object.fromEntries(BSTEPS.map((s) => [s, parseOut(fx(`long_besem_${s}.out`))]));
 check('besem fixtures: invModel=besem', BSTEPS.every((s) => besemFx[s].invModel === 'besem'), besemFx.configural.invModel);
+// the "(bifactor-ESEM)" hyphen must not break the step-name capture (needs the " - " separator)
+check('besem invStep clean (no "ESEM) -" prefix)', besemFx.configural.invStep === 'Configural' && besemFx.metric.invStep === 'Metric (loadings)', [besemFx.configural.invStep, besemFx.metric.invStep]);
 check('besem fixtures: invKind=longitudinal', besemFx.configural.invKind === 'longitudinal', besemFx.configural.invKind);
 check('besem configural χ²(164) = 178.426', approx(besemFx.configural.fit.chi2, 178.426) && besemFx.configural.fit.df === 164, [besemFx.configural.fit.chi2, besemFx.configural.fit.df]);
 check('besem metric χ²(196) = 204.087 (npar 128)', approx(besemFx.metric.fit.chi2, 204.087) && besemFx.metric.nFreeParams === 128, [besemFx.metric.fit.chi2, besemFx.metric.nFreeParams]);
@@ -131,6 +133,15 @@ check('besem latentmean χ²(230) = 240.105', approx(besemFx.latentmean.fit.chi2
 const besemDf = BSTEPS.map((s) => besemFx[s].fit.df);
 check('besem df strictly increasing', besemDf.every((d, i) => i === 0 || d > besemDf[i - 1]), besemDf);
 check('besem all converged', BSTEPS.every((s) => besemFx[s].converged), null);
+// Satorra–Bentler in the invariance table must be POSITIVE for a more-constrained model that fits
+// worse (metric vs configural raw Δχ² = +25.66) — guards the mc/mu ordering in renderInvarianceTable.
+{
+  const html = renderInvarianceTable(
+    [{ label: besemFx.configural.invStep, parsed: besemFx.configural }, { label: besemFx.metric.invStep, parsed: besemFx.metric }],
+    { longitudinal: true },
+  );
+  check('invariance table Δχ²(s) positive (25.67)', html.includes('25.67') && !html.includes('−25.67') && !html.includes('-25.67'), html.match(/-?−?25\.\d\d/g));
+}
 
 console.log('\n— real Mplus fixtures: ESEM sequence —');
 const STEPS = ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'];

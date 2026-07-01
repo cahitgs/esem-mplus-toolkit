@@ -113,7 +113,7 @@ export function renderInvarianceTable(models, { caption, longitudinal = false } 
     const f = m.parsed.fit, prev = i ? models[i - 1].parsed.fit : null;
     const dec = invarianceDecision(prev, f);
     let dchi = '—', ddf = '—';
-    if (prev) { const mc = (prev.df ?? 0) >= (f.df ?? 0) ? f : prev; const mu = mc === f ? prev : f; const sb = sbChiSqDiff(mc, mu); if (sb) { dchi = f2(sb.TRd) + (sb.p < 0.05 ? '*' : ''); ddf = sb.df; } }
+    if (prev) { const mc = (prev.df ?? 0) >= (f.df ?? 0) ? prev : f; const mu = mc === prev ? f : prev; const sb = sbChiSqDiff(mc, mu); if (sb) { dchi = f2(sb.TRd) + (sb.p < 0.05 ? '*' : ''); ddf = sb.df; } }
     const colour = dec.ok === true ? 'color:var(--good)' : dec.ok === false ? 'color:var(--danger)' : '';
     const cells = [m.label, f2(f.chi2), f.df ?? '—', f3(f.cfi), f3(f.tli), `${f3(f.rmsea)} ${ci(f.rmseaLo, f.rmseaHi)}`,
       dchi, ddf, dec.dcfi != null ? signed(dec.dcfi, 3) : '—', dec.drmsea != null ? signed(dec.drmsea, 3) : '—',

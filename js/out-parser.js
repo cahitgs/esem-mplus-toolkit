@@ -113,7 +113,8 @@ export function parseOut(text) {
   if (res.title && /^Longitudinal invariance/i.test(res.title)) {
     res.invKind = 'longitudinal';
     res.invModel = /\(CFA\)/i.test(res.title) ? 'cfa' : /\(bifactor-ESEM\)/i.test(res.title) ? 'besem' : 'esem';
-    const m = res.title.match(/-\s*(.+)$/);
+    // the separator is " - " WITH spaces — "(bifactor-ESEM)" contains a bare hyphen that must not match
+    const m = res.title.match(/\s-\s(.+)$/);
     res.invStep = m ? m[1].trim() : null; // e.g. "Metric (loadings)"
   }
   let mm;
