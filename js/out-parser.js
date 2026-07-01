@@ -112,7 +112,7 @@ export function parseOut(text) {
   // nGroups can't be used). "Longitudinal invariance [(CFA)] - <Step>".
   if (res.title && /^Longitudinal invariance/i.test(res.title)) {
     res.invKind = 'longitudinal';
-    res.invModel = /\(CFA\)/i.test(res.title) ? 'cfa' : 'esem';
+    res.invModel = /\(CFA\)/i.test(res.title) ? 'cfa' : /\(bifactor-ESEM\)/i.test(res.title) ? 'besem' : 'esem';
     const m = res.title.match(/-\s*(.+)$/);
     res.invStep = m ? m[1].trim() : null; // e.g. "Metric (loadings)"
   }

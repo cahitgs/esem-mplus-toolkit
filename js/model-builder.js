@@ -448,7 +448,8 @@ function renderConcept(activeKey) {
   if (!models.length) { host.innerHTML = '<p style="color:var(--ink-faint);font-size:0.84rem;margin:0">Select a model above to see its structure.</p>'; return; }
   const key = activeKey || models[0].key;
   // invariance uses the ESEM measurement model; longitudinal keys carry their model type (linv:<mt>:<step>)
-  const modelType = key.startsWith('linv:') ? key.split(':')[1] : key.startsWith('inv:') ? 'esem' : key;
+  const LINV_TYPE = { esem: 'esem', cfa: 'cfa', besem: 'bifactorEsem' };
+  const modelType = key.startsWith('linv:') ? (LINV_TYPE[key.split(':')[1]] || 'esem') : key.startsWith('inv:') ? 'esem' : key;
   host.innerHTML = conceptDiagramSVG(SPEC, modelType, { showResiduals: false });
 }
 

@@ -102,6 +102,36 @@ const noLoneFlag = (inp) => !inp.split('\n').some((l) => /^\s*\([^()]*\);?\s*$/.
   check('plain ESEM long-name: no lone (*1) flag', noLoneFlag(eg), eg.split('\n').filter((l) => /^\s*\(/.test(l)));
 }
 
+console.log('\n— bifactor-ESEM longitudinal generator (Morin Ch27 T28–T41) —');
+{
+  const s = makeLongNameSpec();
+  s.modelTypes = { cfa: false, esem: false, bifactorCfa: false, bifactorEsem: true };
+  const models = requestedModels(s);
+  check('besem: 6 models with linv:besem keys', models.length === 6 && models.every((m) => /^linv:besem:/.test(m.key)), models.map((m) => m.key));
+  check('besem: files LongInv_besem_*', models.every((m) => /^LongInv_besem_\d_/.test(m.file)), models[0]?.file);
+  const bc = buildInp(s, 'linv:besem:configural'), bm = buildInp(s, 'linv:besem:metric'),
+    bv = buildInp(s, 'linv:besem:varcov'), bl = buildInp(s, 'linv:besem:latentmean');
+  check('besem uses TARGET(ORTHOGONAL) + high iterations', /ROTATION=TARGET\(ORTHOGONAL\);/.test(bc) && /ITERATIONS = 100000;/.test(bc), null);
+  check('besem configural: G blocks on all items (*t1)/(*t2)', /G1 BY x1_t1 .*/.test(bc) && /\w+ \(\*t1\);/.test(bc) && /\w+ \(\*t2\);/.test(bc), null);
+  check('besem metric: all blocks equated (*t1 1)/(*t2 1)', (bm.match(/\(\*t1 1\);/g) || []).length === 4 && (bm.match(/\(\*t2 1\);/g) || []).length === 4, null);
+  check('besem varcov: T2 vars refixed incl. G2', /F4-F6@1;/.test(bv) && /G2@1;/.test(bv), null);
+  check('besem varcov: full covariance equality incl. G pairs', /G1 WITH F1 \(lcov1\);/.test(bv) && /G2 WITH F4 \(lcov1\);/.test(bv) && /F2 WITH F3 \(lcov6\);/.test(bv) && /F5 WITH F6 \(lcov6\);/.test(bv), null);
+  check('besem latentmean: T2 means refixed incl. [G2@0]', /\[F4-F6@0\];/.test(bl) && /\[G2@0\];/.test(bl), null);
+  check('besem: no lone flags, ≤90 chars', [bc, bm, bv, bl].every((x) => noLoneFlag(x) && maxLineLength(x) <= 90), null);
+}
+
+console.log('\n— real Mplus fixtures: bifactor-ESEM sequence (clean invariant 2-wave data) —');
+const BSTEPS = ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'];
+const besemFx = Object.fromEntries(BSTEPS.map((s) => [s, parseOut(fx(`long_besem_${s}.out`))]));
+check('besem fixtures: invModel=besem', BSTEPS.every((s) => besemFx[s].invModel === 'besem'), besemFx.configural.invModel);
+check('besem fixtures: invKind=longitudinal', besemFx.configural.invKind === 'longitudinal', besemFx.configural.invKind);
+check('besem configural χ²(164) = 178.426', approx(besemFx.configural.fit.chi2, 178.426) && besemFx.configural.fit.df === 164, [besemFx.configural.fit.chi2, besemFx.configural.fit.df]);
+check('besem metric χ²(196) = 204.087 (npar 128)', approx(besemFx.metric.fit.chi2, 204.087) && besemFx.metric.nFreeParams === 128, [besemFx.metric.fit.chi2, besemFx.metric.nFreeParams]);
+check('besem latentmean χ²(230) = 240.105', approx(besemFx.latentmean.fit.chi2, 240.105, 0.1), besemFx.latentmean.fit.chi2);
+const besemDf = BSTEPS.map((s) => besemFx[s].fit.df);
+check('besem df strictly increasing', besemDf.every((d, i) => i === 0 || d > besemDf[i - 1]), besemDf);
+check('besem all converged', BSTEPS.every((s) => besemFx[s].converged), null);
+
 console.log('\n— real Mplus fixtures: ESEM sequence —');
 const STEPS = ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'];
 const esemFx = Object.fromEntries(STEPS.map((s) => [s, parseOut(fx(`long_esem_${s}.out`))]));

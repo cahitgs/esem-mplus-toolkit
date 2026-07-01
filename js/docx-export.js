@@ -10,8 +10,9 @@ const splitGroups = (models) => {
   const longi = models.filter((m) => m.parsed.invKind === 'longitudinal');
   const rest = models.filter((m) => m.parsed.invKind !== 'longitudinal');
   return {
-    longiEsem: longi.filter((m) => m.parsed.invModel !== 'cfa').sort(byDf),
+    longiEsem: longi.filter((m) => !['cfa', 'besem'].includes(m.parsed.invModel)).sort(byDf),
     longiCfa: longi.filter((m) => m.parsed.invModel === 'cfa').sort(byDf),
+    longiBesem: longi.filter((m) => m.parsed.invModel === 'besem').sort(byDf),
     multi: rest.filter((m) => (m.parsed.nGroups || 1) > 1).sort(byDf),
     single: rest.filter((m) => (m.parsed.nGroups || 1) <= 1),
   };
@@ -99,7 +100,8 @@ function loadingRows(p, target) {
 // Word clipboard (HTML)
 // ----------------------------------------------------------------------------
 function buildWordHtml(models, { factorLabels = {} } = {}) {
-  const { longiEsem, longiCfa, multi, single } = splitGroups(models);
+  const { longiEsem, longiCfa, longiBesem, multi, single } = splitGroups(models);
+  const longiKinds = [longiEsem, longiCfa, longiBesem].filter((x) => x.length).length;
   const lbl = (p, fid) => (factorLabels[fid] || fid);
   const TBL = 'border-collapse:collapse;font-family:Calibri,sans-serif;font-size:11pt;margin:6pt 0;';
   const top = 'border-top:1.5pt solid #000;', bot = 'border-bottom:1.5pt solid #000;', hbot = 'border-bottom:0.75pt solid #000;';
@@ -117,8 +119,9 @@ function buildWordHtml(models, { factorLabels = {} } = {}) {
     const ir = invRows(set);
     longi += simpleTable(`Table. Tests of longitudinal measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`, ir.head, ir.body, longiNote(set, modelLabel));
   };
-  longiTable(longiEsem, longiCfa.length ? 'ESEM' : '');
-  longiTable(longiCfa, longiEsem.length ? 'CFA' : '');
+  longiTable(longiEsem, longiKinds > 1 ? 'ESEM' : '');
+  longiTable(longiCfa, longiKinds > 1 ? 'CFA' : '');
+  longiTable(longiBesem, longiKinds > 1 ? 'Bifactor-ESEM' : '');
 
   // invariance table (multi-group)
   let inv = '';
@@ -140,7 +143,7 @@ function buildWordHtml(models, { factorLabels = {} } = {}) {
     loads += `</table><p style="font-size:9pt;margin:2pt 0 6pt"><i>Note.</i> Target loadings in <b>bold</b>; δ = uniqueness; ω = composite reliability.</p>`;
   }
 
-  const proseParts = [...invProseText(longiEsem, { longitudinal: true }), ...invProseText(longiCfa, { longitudinal: true }), ...proseText(single), ...invProseText(multi)];
+  const proseParts = [...invProseText(longiEsem, { longitudinal: true }), ...invProseText(longiCfa, { longitudinal: true }), ...invProseText(longiBesem, { longitudinal: true }), ...proseText(single), ...invProseText(multi)];
   const prose = proseParts.map((t) => `<p style="font-family:Calibri;font-size:11pt;line-height:1.5;margin:6pt 0">${t}</p>`).join('');
   return `<html><head><meta charset="utf-8"></head><body>${longi}${inv}${fit}${loads}<h3 style="font-family:Calibri">Suggested text</h3>${prose}</body></html>`;
 }
@@ -212,7 +215,8 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
   const note = (t) => new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: t, font: 'Calibri', size: 16 })] });
   const para = (t) => new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: t, font: 'Calibri', size: 22 })] });
 
-  const { longiEsem, longiCfa, multi, single } = splitGroups(models);
+  const { longiEsem, longiCfa, longiBesem, multi, single } = splitGroups(models);
+  const longiKinds = [longiEsem, longiCfa, longiBesem].filter((x) => x.length).length;
   const mkTable = (rows) => {
     const header = new TableRow({ children: rows.head.map((h, i) => headCell(h, i ? 'right' : 'left')) });
     const body = rows.body.map((r, ri) => new TableRow({ children: r.map((c, i) => tc(c, { align: i ? 'right' : 'left', botB: ri === rows.body.length - 1 })) }));
@@ -226,8 +230,9 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
     if (!set.length) return;
     blocks.push(italic(`Table. Tests of longitudinal measurement invariance${modelLabel ? ` (${modelLabel})` : ''}`), mkTable(invRows(set)), note(`Note. ${longiNote(set, modelLabel)}`));
   };
-  longiBlock(longiEsem, longiCfa.length ? 'ESEM' : '');
-  longiBlock(longiCfa, longiEsem.length ? 'CFA' : '');
+  longiBlock(longiEsem, longiKinds > 1 ? 'ESEM' : '');
+  longiBlock(longiCfa, longiKinds > 1 ? 'CFA' : '');
+  longiBlock(longiBesem, longiKinds > 1 ? 'Bifactor-ESEM' : '');
 
   // invariance table (multi-group)
   if (multi.length) blocks.push(italic('Table. Tests of measurement invariance'), mkTable(invRows(multi)), note(`Note. N = ${multi[0]?.parsed.nObs ?? '—'} across ${multi[0]?.parsed.nGroups ?? 2} groups. Invariance supported when ΔCFI ≥ −.010 and ΔRMSEA ≤ .015 (Chen, 2007).`));
@@ -248,7 +253,7 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
   }
 
   blocks.push(new Paragraph({ children: [new TextRun({ text: 'Suggested text', bold: true, font: 'Calibri', size: 24 })], spacing: { before: 200, after: 80 } }));
-  for (const t of [...invProseText(longiEsem, { longitudinal: true }), ...invProseText(longiCfa, { longitudinal: true }), ...proseText(single), ...invProseText(multi)]) blocks.push(para(t));
+  for (const t of [...invProseText(longiEsem, { longitudinal: true }), ...invProseText(longiCfa, { longitudinal: true }), ...invProseText(longiBesem, { longitudinal: true }), ...proseText(single), ...invProseText(multi)]) blocks.push(para(t));
 
   const doc = new Document({ sections: [{ children: blocks }] });
   return Packer.toBlob(doc);

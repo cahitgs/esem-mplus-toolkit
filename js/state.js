@@ -138,6 +138,7 @@ export function validateSpec(spec) {
     const overlap = (w1 || []).filter((x) => (w2 || []).includes(x));
     if (overlap.length) errors.push(`Time 1 and Time 2 must use different columns (shared: ${overlap.join(', ')}).`);
     if ((spec.longitudinal.invariance.sequence?.length || 0) === 0) errors.push('Select at least one invariance step (start with Configural).');
+    if (spec.modelTypes.bifactorCfa) warnings.push('Bifactor-CFA is not generated across time — longitudinal sequences cover CFA, ESEM, and bifactor-ESEM.');
     // (factor-count and ≥2-target-per-factor checks above already apply: spec.items === Time-1 columns.)
   }
   return { errors, warnings };

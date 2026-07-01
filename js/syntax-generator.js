@@ -337,6 +337,60 @@ function buildLongInvarianceESEM(spec, step) {
   return lines.join('\n') + '\n';
 }
 
+// Bifactor-ESEM longitudinal invariance (Morin, Hoyle Handbook Ch. 27, T28–T41): per wave one
+// general factor on all indicators plus one target block per specific factor, all in a single
+// orthogonal-target ESEM set — G1/F1..Fk at Time 1 (*t1), G2/F(k+1)..F2k at Time 2 (*t2).
+// varcov refixes the T2 variances AND equates every within-wave factor covariance across waves
+// (G included): Mplus rejects a variances-only refix for an EFA set (error 1001) — the full
+// var-cov pattern must be specified together. ITERATIONS raised per Morin's own settings for
+// this model family. NOTE: Morin's published Data-2 strong→means models are PARTIAL (his z2
+// intercept is non-invariant by design); the app emits FULL invariance, so on data with a truly
+// non-invariant intercept the scalar/strict/varcov steps may not converge — that is the data
+// speaking, not the syntax.
+function buildLongInvarianceBifactorEsem(spec, step) {
+  const [t1, t2] = spec.longitudinal.waves;
+  const k = spec.factors.length;
+  const { t1: t1r, t2: t2r } = longRanges(k);
+  const f = longFlags(step);
+  const flag = (w) => `(*${w}${f.equate ? ' 1' : ''})`;
+  const lines = [
+    ...titleLine(`Longitudinal invariance (bifactor-ESEM) - ${INV_META[step].label}`),
+    ...headerBlocks(spec, { rotationOverride: 'ROTATION=TARGET(ORTHOGONAL);', iterations: 100000, useVars: [...t1, ...t2] }),
+    'MODEL:',
+  ];
+  // one wave's measurement set: G on all items, then each specific factor's target block
+  const waveBlocks = (items, gid, fBase, tag) => {
+    const out = [stmt([`${gid} BY`, ...items, tag])];
+    spec.factors.forEach((fac, fi) => {
+      const mains = new Set(mainItemsForFactor(spec, fac.id).map((it) => items === t1 ? it : waveCounterpart(spec, it)));
+      out.push(stmt([`F${fBase + fi} BY`, ...items.map((it) => (mains.has(it) ? it : `${it}~0`)), tag]));
+    });
+    return out;
+  };
+  lines.push(...waveBlocks(t1, 'G1', 1, flag('t1')));
+  lines.push(...waveBlocks(t2, 'G2', k + 1, flag('t2')));
+  if (f.residuals) { lines.push(chunkLabeled(t1, 'u', false)); lines.push(chunkLabeled(t2, 'u', false)); }
+  if (f.varcov) {
+    lines.push(`${t2r}@1;`, 'G2@1;');
+    const fact1 = ['G1', ...Array.from({ length: k }, (_, i) => `F${i + 1}`)];
+    const fact2 = ['G2', ...Array.from({ length: k }, (_, i) => `F${k + i + 1}`)];
+    let c = 1;
+    for (let i = 0; i < fact1.length; i++) for (let j = i + 1; j < fact1.length; j++) {
+      lines.push(`${fact1[i]} WITH ${fact1[j]} (lcov${c});`);
+      lines.push(`${fact2[i]} WITH ${fact2[j]} (lcov${c});`);
+      c++;
+    }
+  }
+  if (f.intercepts) {
+    lines.push(chunkLabeled(t1, 'i', true), chunkLabeled(t2, 'i', true));
+    lines.push(`[${t1r}@0];`, '[G1@0];');
+    lines.push(f.meanFix ? `[${t2r}@0];` : `[${t2r}];`, f.meanFix ? '[G2@0];' : '[G2];');
+  }
+  if (spec.longitudinal.correlatedUniqueness) lines.push(...pwithLines(t1, t2));
+  lines.push(...outputBlock(spec));
+  return lines.join('\n') + '\n';
+}
+
 function buildLongInvarianceCFA(spec, step) {
   const [t1, t2] = spec.longitudinal.waves;
   const k = spec.factors.length;
@@ -372,7 +426,9 @@ function buildLongInvarianceCFA(spec, step) {
 export function buildInp(spec, modelType) {
   if (modelType.startsWith('linv:')) {
     const [, mt, step] = modelType.split(':');
-    return mt === 'cfa' ? buildLongInvarianceCFA(spec, step) : buildLongInvarianceESEM(spec, step);
+    if (mt === 'cfa') return buildLongInvarianceCFA(spec, step);
+    if (mt === 'besem') return buildLongInvarianceBifactorEsem(spec, step);
+    return buildLongInvarianceESEM(spec, step);
   }
   if (modelType.startsWith('inv:')) return buildInvariance(spec, modelType.slice(4));
   switch (modelType) {
@@ -389,14 +445,16 @@ export function requestedModels(spec) {
   // Longitudinal invariance: single-group ESEM and/or CFA sequence across two waves.
   if (spec.longitudinal?.enabled && spec.longitudinal.waves?.[0]?.length) {
     const seq = spec.longitudinal.invariance.sequence || INV_SEQUENCE;
+    const MT_LABEL = { esem: 'ESEM', cfa: 'CFA', besem: 'Bifactor-ESEM' };
     const want = [];
     if (spec.modelTypes.esem) want.push('esem');
     if (spec.modelTypes.cfa) want.push('cfa');
+    if (spec.modelTypes.bifactorEsem) want.push('besem');
     if (!want.length) want.push('esem');
     const out = [];
     for (const mt of want) seq.forEach((step, i) => out.push({
       key: `linv:${mt}:${step}`, step, modelType: mt,
-      label: `${mt === 'cfa' ? 'CFA' : 'ESEM'} · ${INV_META[step].label}`,
+      label: `${MT_LABEL[mt]} · ${INV_META[step].label}`,
       file: `LongInv_${mt}_${i + 1}_${step}.inp`,
     }));
     return out;

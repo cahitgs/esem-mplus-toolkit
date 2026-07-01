@@ -315,11 +315,14 @@ function renderResultsOutput() {
     }
   };
   if (longi.length) {
-    const esem = longi.filter((m) => m.parsed.invModel !== 'cfa');
+    const esem = longi.filter((m) => !['cfa', 'besem'].includes(m.parsed.invModel));
     const cfa = longi.filter((m) => m.parsed.invModel === 'cfa');
-    // Only tag the model when both kinds are present; a single sequence needs no qualifier.
-    renderLongiBlock(esem, cfa.length ? 'ESEM' : '');
-    renderLongiBlock(cfa, esem.length ? 'CFA' : '');
+    const besem = longi.filter((m) => m.parsed.invModel === 'besem');
+    // Only tag the model when several kinds are present; a single sequence needs no qualifier.
+    const kinds = [esem, cfa, besem].filter((s) => s.length).length;
+    renderLongiBlock(esem, kinds > 1 ? 'ESEM' : '');
+    renderLongiBlock(cfa, kinds > 1 ? 'CFA' : '');
+    renderLongiBlock(besem, kinds > 1 ? 'Bifactor-ESEM' : '');
   }
 
   if (multi.length) {
