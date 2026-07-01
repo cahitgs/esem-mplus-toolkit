@@ -69,6 +69,39 @@ check('CFA varcov refixes T2 variance', /F3-F4@1;/.test(gen('cfa', 'varcov')), n
 check('CFA latentmean refixes T2 means @0', /\[F3-F4@0\];/.test(cl), null);
 check('every CFA model ≤ 90 chars/line', [cc, cm, cs, cl].every((s) => maxLineLength(s) <= 90), null);
 
+console.log('\n— flag wrapping (3 factors, long names — Mplus ignores a flag alone on a wrapped line) —');
+// Mplus 8.3 silently ignores an ESEM set flag "(*t1 1)" that starts its own continuation line:
+// the metric model then fits the configural model with NO warning, and the varcov step dies with
+// FATAL error 1020 (found end-to-end testing Morin Ch27 Data 2, 3 factors × 12 "_t1/_t2" names).
+const L1 = ['x1_t1', 'x2_t1', 'x3_t1', 'x4_t1', 'y1_t1', 'y2_t1', 'y3_t1', 'y4_t1', 'z1_t1', 'z2_t1', 'z3_t1', 'z4_t1'];
+const L2 = ['x1_t2', 'x2_t2', 'x3_t2', 'x4_t2', 'y1_t2', 'y2_t2', 'y3_t2', 'y4_t2', 'z1_t2', 'z2_t2', 'z3_t2', 'z4_t2'];
+function makeLongNameSpec() {
+  const s = createModelSpec({
+    fileName: 'data2.dat', mplusFile: 'data2.dat', delimiter: 'whitespace', hasHeader: false,
+    nCols: 24, nRows: 10000, varNames: [...L1, ...L2], categorical: [], missingCode: null,
+  });
+  s.longitudinal.enabled = true;
+  setWaveItems(s, 0, L1);
+  setWaveItems(s, 1, L2);
+  s.factors = [1, 2, 3].map((i) => ({ id: `F${i}`, label: `F${i}` }));
+  s.target = {};
+  L1.forEach((it, idx) => { s.target[it] = { F1: idx < 4, F2: idx >= 4 && idx < 8, F3: idx >= 8 }; });
+  return s;
+}
+const noLoneFlag = (inp) => !inp.split('\n').some((l) => /^\s*\([^()]*\);?\s*$/.test(l));
+{
+  const s = makeLongNameSpec();
+  const lm = buildInp(s, 'linv:esem:metric'), lc = buildInp(s, 'linv:esem:configural'), lv = buildInp(s, 'linv:esem:varcov');
+  check('3f long-name metric: no flag starts a line', noLoneFlag(lm), lm.split('\n').filter((l) => /^\s*\(/.test(l)));
+  check('3f long-name metric: (*t1 1) shares a line with a variable', /\w+ \(\*t1 1\);/.test(lm), null);
+  check('3f long-name configural/varcov: no lone flags', noLoneFlag(lc) && noLoneFlag(lv), null);
+  check('3f long-name models stay ≤ 90 chars/line', [lm, lc, lv].every((x) => maxLineLength(x) <= 90), null);
+  // plain ESEM with many long items — same hazard on the "(*1)" flag
+  s.longitudinal.enabled = false;
+  const eg = buildInp(s, 'esem');
+  check('plain ESEM long-name: no lone (*1) flag', noLoneFlag(eg), eg.split('\n').filter((l) => /^\s*\(/.test(l)));
+}
+
 console.log('\n— real Mplus fixtures: ESEM sequence —');
 const STEPS = ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'];
 const esemFx = Object.fromEntries(STEPS.map((s) => [s, parseOut(fx(`long_esem_${s}.out`))]));

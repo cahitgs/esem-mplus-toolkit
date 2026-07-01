@@ -9,7 +9,12 @@ import { factorIds, mainItemsForFactor, waveCounterpart } from './state.js';
 
 const WRAP = 86;
 
-/** Join words into a `;`-terminated statement, wrapping long lines with a 2-space continuation. */
+/** Join words into a `;`-terminated statement, wrapping long lines with a 2-space continuation.
+ *  A trailing parenthesized token — an ESEM set flag "(*1)"/"(*t1 1)" or an equality label —
+ *  must NEVER start a continuation line by itself: Mplus silently ignores a flag/label that
+ *  does not share a physical line with at least one variable (verified in Mplus 8.3 — the
+ *  metric step then fits the configural model with no warning). When the flag would wrap
+ *  alone, the last variable is moved down with it. */
 function stmt(words) {
   const out = [];
   let cur = '';
@@ -19,6 +24,15 @@ function stmt(words) {
     else cur = piece;
   }
   out.push(cur + ';');
+  // keep a trailing "(...)" token attached to at least one preceding word
+  const last = out[out.length - 1];
+  if (out.length > 1 && /^\s*\([^()]*\);$/.test(last)) {
+    const prev = out[out.length - 2].trimEnd();
+    const cut = prev.lastIndexOf(' ');
+    const keep = prev.slice(0, cut).trimEnd();
+    const moved = '  ' + prev.slice(cut + 1) + ' ' + last.trim();
+    out.splice(out.length - 2, 2, ...(keep ? [keep, moved] : [moved]));
+  }
   return out.join('\n');
 }
 
