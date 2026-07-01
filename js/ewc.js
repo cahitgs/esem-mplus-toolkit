@@ -34,7 +34,10 @@ export function parseSvalues(text) {
   const bare = []; // "name op value" lines (factor variance OR uniqueness — classify after)
 
   for (let i = hIdx + 1; i < lines.length; i++) {
-    const L = lines[i].trim();
+    // Mplus echoes a parameter's label inside SVALUES ("z2*0.20786 (res1);" when the model
+    // carried a residual-positivity constraint) — strip it, or the end-anchored uniqueness
+    // regex below misses the line and the EWC model silently loses that start value.
+    const L = lines[i].trim().replace(/\s*\([^()]*\)(?=\s*;?\s*$)/, '');
     if (!L) continue;
     if (/^(TECHNICAL|STARTING VALUES|Beginning Time|QUALITY|R-SQUARE|DIAGRAM|MUTHEN|\*\*\*)/i.test(L)) break;
     let m;

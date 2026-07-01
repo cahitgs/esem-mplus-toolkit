@@ -57,6 +57,14 @@ ok('besem inp: all variances @1 (g,f1,f2)', /g@1;/.test(bInp) && /f1@1;/.test(bI
 ok('besem inp: 6 fixed cross-loadings in BY lines', (bInp.match(/ BY \S+@/g) || []).length === 6, (bInp.match(/ BY \S+@/g) || []).length);
 ok('besem inp: all lines <= 90 chars', bInp.split('\n').every((l) => l.length <= 90), bInp.split('\n').reduce((m, l) => Math.max(m, l.length), 0));
 
+// ---- SVALUES echo carrying a parameter label ("z2*0.20786 (res1);" — residual-positivity aid) ----
+const lab = parseSvalues(fx('besem_target_data1.out'));
+ok('labeled: SVALUES found', lab.found === true);
+ok('labeled: z2 uniqueness parsed despite trailing "(res1)"', lab.uniq.z2 === '0.20786', lab.uniq.z2);
+ok('labeled: every item keeps its uniqueness start value', lab.items.length === 12 && lab.items.every((it) => lab.uniq[it] != null), lab.items.filter((it) => lab.uniq[it] == null));
+const labInp = buildEwcInp(lab, { referents: suggestReferents(lab), title: 'EWC' });
+ok('labeled: EWC .inp emits the z2 start value', labInp.includes('z2*0.20786;'), null);
+
 // ---- non-SVALUES output yields found:false ----
 const none = parseSvalues('SOME RANDOM TEXT WITHOUT A MODEL COMMAND BLOCK');
 ok('no-svalues: found=false', none.found === false);

@@ -103,7 +103,36 @@ function headerBlocks(spec, { rotation, rotationOverride, iterations, useVars } 
   if (rotationOverride) lines.push(rotationOverride);
   else if (rotation) lines.push(rotationLine(spec));
   if (iterations) lines.push(`ITERATIONS = ${iterations};`);
+  // Loosened criterion (Morin's T32 remedy) — deliberately emitted for EVERY model, the
+  // inv:/linv: sequences included: that is exactly where Morin used it.
+  if (spec.aids?.convergence) lines.push(`CONVERGENCE = ${fmtConvergence(spec.aids.convergenceValue)};`);
   return lines;
+}
+
+function fmtConvergence(v) {
+  const n = Number.isFinite(v) && v > 0 ? v : 0.005;
+  let s = String(n);
+  if (Math.abs(n) < 1) s = s.replace(/^(-?)0\./, '$1.'); // Mplus convention: ".005"
+  return s;
+}
+
+// Heywood-case remedy (Morin, Hoyle ch. 27 footnote 5): label each selected item's residual
+// variance in MODEL ("X2 (res1);") and force it positive via MODEL CONSTRAINT ("res1 > 0;").
+// Exact pattern verified in real Mplus 8.3 (test/fixtures/besem_target_data1.out). Single-group
+// measurement builders ONLY: in multi-group models a MODEL label equates the parameter across
+// groups, and the strict steps already carry u#/i# equality labels — a second label on the same
+// residual would collide — so buildInvariance/buildLongInvariance* never emit these.
+function residualAidLines(spec) {
+  const sel = new Set(spec.aids?.positiveResiduals || []);
+  // Categorical outcomes are excluded: under the default DELTA parameterization their residual
+  // variance is not a free parameter, and Mplus rejects the label ("Variances for categorical
+  // outcomes can only be specified using PARAMETERIZATION=THETA").
+  const cat = new Set(spec.data?.categorical || []);
+  const items = spec.items.filter((it) => sel.has(it) && !cat.has(it));
+  return {
+    labels: items.map((it, i) => `${it} (res${i + 1});`),
+    constraint: items.length ? ['MODEL CONSTRAINT:', ...items.map((_, i) => `res${i + 1} > 0;`)] : [],
+  };
 }
 
 function outputBlock(spec, { svalues = false } = {}) {
@@ -144,6 +173,8 @@ function buildCFA(spec) {
   const lines = [...titleLine(`CFA - ${spec.factors.length} factors`), ...headerBlocks(spec, { rotation: false }), 'MODEL:'];
   for (const f of spec.factors) lines.push(cfaByLine(f.id, mainItemsForFactor(spec, f.id)));
   lines.push(`${range}@1;`); // fix factor variances to 1 (first loading freed above)
+  const aid = residualAidLines(spec);
+  lines.push(...aid.labels, ...aid.constraint);
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
 }
@@ -152,10 +183,12 @@ function buildCFA(spec) {
 function buildESEMGeomin(spec) {
   const ids = factorIds(spec);
   const range = ids.length > 1 ? `${ids[0]}-${ids[ids.length - 1]}` : ids[0];
+  const aid = residualAidLines(spec);
   const lines = [
     ...titleLine(`ESEM (Geomin ${spec.rotation.oblique ? 'oblique' : 'orthogonal'}) - ${ids.length} factors`),
     ...headerBlocks(spec, { rotation: true }), 'MODEL:',
     stmt([`${range} BY`, ...spec.items, '(*1)']),
+    ...aid.labels, ...aid.constraint,
     ...outputBlock(spec, { svalues: true }),
   ];
   return lines.join('\n') + '\n';
@@ -171,6 +204,8 @@ function buildESEMTarget(spec) {
     const toks = spec.items.map((it) => (spec.target[it]?.[f.id] ? it : `${it}~0`));
     lines.push(stmt([`${f.id} BY`, ...toks, '(*1)']));
   }
+  const aid = residualAidLines(spec);
+  lines.push(...aid.labels, ...aid.constraint);
   lines.push(...outputBlock(spec, { svalues: true }));
   return lines.join('\n') + '\n';
 }
@@ -189,6 +224,8 @@ function buildBifactorCfa(spec) {
   for (const f of spec.factors) lines.push(cfaByLine(f.id, mainItemsForFactor(spec, f.id)));
   lines.push(`G@1;`, `${range}@1;`);                                       // fix all factor variances to 1
   lines.push(...orthogonalityLines(['G', ...ids]));                        // bifactor: all factors orthogonal
+  const aid = residualAidLines(spec);
+  lines.push(...aid.labels, ...aid.constraint);
   lines.push(...outputBlock(spec));
   return lines.join('\n') + '\n';
 }
@@ -198,6 +235,7 @@ function buildBifactorCfa(spec) {
 // as the G-factor). Target → orthogonal target rotation with an all-main G block + target S blocks.
 function buildBifactorEsem(spec) {
   const ids = factorIds(spec);
+  const aid = residualAidLines(spec);
   if (spec.rotation.type === 'TARGET') {
     const lines = [
       ...titleLine(`Bifactor-ESEM (target orthogonal) - ${spec.factors.length} specific factors`),
@@ -205,6 +243,7 @@ function buildBifactorEsem(spec) {
       stmt(['G BY', ...spec.items, '(*1)']),
     ];
     for (const f of spec.factors) lines.push(stmt([`${f.id} BY`, ...spec.items.map((it) => (spec.target[it]?.[f.id] ? it : `${it}~0`)), '(*1)']));
+    lines.push(...aid.labels, ...aid.constraint);
     lines.push(...outputBlock(spec, { svalues: true }));
     return lines.join('\n') + '\n';
   }
@@ -215,6 +254,7 @@ function buildBifactorEsem(spec) {
     ...titleLine(`Bifactor-ESEM (BI-GEOMIN orthogonal) - ${spec.factors.length} specific factors`),
     ...headerBlocks(spec, { rotationOverride: `ROTATION=BI-GEOMIN(ORTHOGONAL${eps});` }), 'MODEL:',
     stmt([`G ${range} BY`, ...spec.items, '(*1)']),
+    ...aid.labels, ...aid.constraint,
     ...outputBlock(spec, { svalues: true }),
   ];
   return lines.join('\n') + '\n';

@@ -37,6 +37,9 @@ in body image research_, _Body Image_ 47, 262–278.**
 - **Bifactor-CFA** and **Bifactor-ESEM** (BI-GEOMIN orthogonal / orthogonal Target)
 - **Measurement invariance** — across **groups** (multi-group) or across **time** (within-person, 2-wave longitudinal, for CFA, ESEM, and **bifactor-ESEM**): configural → metric → scalar → strict → variance–covariance → latent means (Satorra–Bentler scaled Δχ² for MLR; Chen 2007 ΔCFI/ΔRMSEA verdicts). Longitudinal models equate loadings across waves and correlate each indicator's residual over time; the bifactor sequence follows Morin's Hoyle-Handbook chapter (orthogonal target rotation, general + specific factors per wave).
 - **ESEM-within-CFA** — convert a rotated ESEM solution into an equivalent CFA you can embed in larger SEM/MIMIC/DIF models (Morin's referent method)
+- **Convergence aids** (optional, on the Syntax step) — the two remedies Morin uses in the Hoyle-Handbook chapter: a loosened `CONVERGENCE` criterion (emitted for every model, invariance sequences included) and per-item residual-variance positivity constraints (`item (res#); … MODEL CONSTRAINT: res# > 0;`, single-group measurement models only) for Heywood cases
+
+Standardized-loadings tables follow Morin's Table-2 layout — items grouped into subscale blocks with a per-block ω row, target loadings bold, non-significant loadings italic — identically in the browser, the copy-to-Word HTML, and the `.docx` export.
 
 ### Path diagrams
 
@@ -92,9 +95,11 @@ back through Mplus 8.3 to confirm it reproduces the intended models (matching de
 ```bash
 node test/parser.test.mjs       # .out parser             (57)
 node test/dataparse.test.mjs    # data-file detection     (9)
-node test/ewc.test.mjs          # ESEM-within-CFA         (32)
+node test/ewc.test.mjs          # ESEM-within-CFA         (36)
 node test/longitudinal.test.mjs # longitudinal invariance (67)
 node test/apa.test.mjs          # Morin-style APA tables   (16)
+node test/docx.test.mjs         # Word/.docx export        (15)
+node test/aids.test.mjs         # convergence aids         (21)
 ```
 
 ---

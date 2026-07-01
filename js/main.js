@@ -188,6 +188,60 @@ function renderSyntaxStep() {
   card.append(tabsRow, pre);
   host.append(card);
 
+  // Convergence aids (Morin, Hoyle ch. 27): loosened CONVERGENCE + residual positivity constraints.
+  const aids = spec.aids || (spec.aids = { convergence: false, convergenceValue: 0.005, positiveResiduals: [] });
+  const invOn = spec.groups.enabled || spec.longitudinal?.enabled;
+  const aidCard = el('div', { class: 'surface p-6 mt-6' });
+  aidCard.append(el('p', { class: 'eyebrow mb-3' }, 'Convergence aids (optional)'));
+  const syncConv = () => { convInput.disabled = !aids.convergence; convInput.style.opacity = aids.convergence ? '1' : '0.4'; };
+  const convInput = el('input', {
+    type: 'number', step: '0.001', min: '0', value: String(aids.convergenceValue ?? 0.005),
+    'aria-label': 'convergence criterion value',
+    class: 'w-24 px-2 py-1 rounded font-mono text-[0.82rem]',
+    style: { border: '1px solid var(--line-strong)', background: 'var(--surface)' },
+    oninput: (e) => { const v = parseFloat(e.target.value); aids.convergenceValue = Number.isFinite(v) && v > 0 ? v : 0.005; draw(); },
+    // on commit (blur), reflect the value actually in effect — a cleared/zero field falls back to .005
+    onchange: (e) => { e.target.value = String(aids.convergenceValue ?? 0.005); },
+  });
+  aidCard.append(el('div', { class: 'flex items-center gap-2.5' }, [
+    el('label', { class: 'flex items-center gap-2.5 cursor-pointer' }, [
+      el('input', { type: 'checkbox', checked: aids.convergence, style: { accentColor: 'var(--petrol)' },
+        onchange: (e) => { aids.convergence = e.target.checked; syncConv(); draw(); } }),
+      el('span', { class: 'font-semibold text-[0.9rem] font-mono', style: { color: 'var(--ink)' } }, 'CONVERGENCE ='),
+    ]),
+    convInput,
+  ]));
+  syncConv();
+  aidCard.append(el('p', { class: 'text-[0.78rem] mt-1 mb-4', style: { color: 'var(--ink-faint)' } },
+    'Loosens Mplus’s convergence criterion — Morin’s remedy for hard-to-converge invariance models. Report it when used.'));
+  aidCard.append(el('p', { class: 'text-[0.84rem] font-semibold', style: { color: 'var(--ink)' } }, 'Constrain residual variance > 0'));
+  if (invOn) {
+    aidCard.append(el('p', { class: 'text-[0.78rem] mt-1', style: { color: 'var(--ink-faint)' } },
+      'Residual constraints are not emitted for invariance sequences (a MODEL label there equates the parameter across groups/waves). CONVERGENCE above still applies to every generated model.'));
+  } else {
+    const box = el('div', { class: 'flex flex-wrap gap-1.5 mt-2' });
+    for (const it of spec.items) {
+      // Categorical items are offered disabled: their residual variance is not a free parameter
+      // under the default DELTA parameterization, so the generator skips them (see residualAidLines).
+      const isCat = spec.data.categorical?.includes(it);
+      const on = () => aids.positiveResiduals.includes(it);
+      const chip = el('button', { class: 'chip', disabled: isCat, title: isCat ? 'categorical item — residual variance is not a free parameter (DELTA parameterization)' : undefined, style: { cursor: isCat ? 'not-allowed' : 'pointer', opacity: isCat ? '0.35' : '1' } }, it);
+      const sync = () => { chip.setAttribute('aria-pressed', String(on())); Object.assign(chip.style, on()
+        ? { background: 'var(--ochre)', color: '#2A1808', borderColor: 'transparent' }
+        : { background: 'var(--surface)', color: 'var(--ink-faint)', borderColor: 'var(--line)' }); };
+      if (!isCat) chip.onclick = () => { aids.positiveResiduals = on() ? aids.positiveResiduals.filter((x) => x !== it) : [...aids.positiveResiduals, it]; sync(); draw(); };
+      sync();
+      box.append(chip);
+    }
+    aidCard.append(box);
+    aidCard.append(el('p', { class: 'text-[0.78rem] mt-2', style: { color: 'var(--ink-faint)' } }, [
+      'Heywood-case remedy: adds ', el('code', { style: { fontFamily: 'var(--font-mono)' } }, 'item (res#);'),
+      ' with ', el('code', { style: { fontFamily: 'var(--font-mono)' } }, 'MODEL CONSTRAINT: res# > 0;'),
+      '. Applied to the measurement models only. Note: with MODEL CONSTRAINT present, Mplus ignores a MODINDICES request.',
+    ]));
+  }
+  host.append(aidCard);
+
   // Mplus can't read a semicolon CSV or a file with a header row — tell the user to use the .dat.
   if (hasData) {
     const why = data.needsMplusDat

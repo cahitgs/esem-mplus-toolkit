@@ -3,7 +3,7 @@
 //   exportDocx(models)         → a real .docx via the `docx` UMD global
 //   zipInputs(files)           → bundle generated .inp files via the `JSZip` UMD global
 import { apaNum, apaP, toast, downloadBlob } from './ui.js';
-import { sbChiSqDiff, invarianceDecision } from './apa-render.js';
+import { sbChiSqDiff, invarianceDecision, buildLoadingsModel } from './apa-render.js';
 
 const byDf = (a, b) => (a.parsed.fit.df ?? 0) - (b.parsed.fit.df ?? 0);
 const splitGroups = (models) => {
@@ -44,11 +44,8 @@ function longiNote(models, modelLabel) {
 const f2 = (x) => apaNum(x, 2, false);
 const f3 = (x) => apaNum(x, 3);
 const ci = (lo, hi) => (lo == null || hi == null ? '—' : `[${f3(lo)}, ${f3(hi)}]`);
-const isTarget = (p, it, fid, target) => {
-  if (target) return !!target[it]?.[fid];
-  if (p.generalFactor) return fid === p.generalFactor || p.specificFactor[it] === fid;
-  return p.primaryFactor[it] === fid;
-};
+// Morin-style loadings-table note (same text in Word HTML + .docx; "Note." prefix added per renderer).
+const loadingsNote = (p, model) => `Target (primary) loadings in bold${model.anyNonSig ? '; non-significant loadings (p ≥ .05) in italics' : ''}. δ = uniqueness (1 − R²); ω = McDonald's composite reliability (per subscale block${p.generalFactor ? "; the general factor's ω is shown on the last block" : ''}).`;
 
 // ----------------------------------------------------------------------------
 // Shared row model so the HTML and .docx builders stay in lockstep.
@@ -78,34 +75,16 @@ function fitRows(models) {
 }
 function signed(x) { return (x < 0 ? '−' : '+') + apaNum(Math.abs(x), 3); }
 
-function loadingRows(p, target) {
-  const factors = p.factorOrder;
-  const head = ['Item', ...factors, 'δ'];
-  const body = p.items.map((it) => ({
-    cells: [it, ...factors.map((fid) => f3(p.loadings[fid]?.[it]?.est)), f3(p.uniqueness[it])],
-    bold: [false, ...factors.map((fid) => isTarget(p, it, fid, target)), false],
-  }));
-  const omega = ['ω', ...factors.map((fid) => f3(p.omega[fid])), ''];
-  // factor correlations (lower triangle)
-  const cmap = new Map();
-  for (const c of p.factorCorr) { cmap.set(`${c.a}|${c.b}`, c.est); cmap.set(`${c.b}|${c.a}`, c.est); }
-  const corr = factors.map((fid, i) => {
-    if (i === 0) return null;
-    return [fid, ...factors.map((gid, j) => (j < i ? f3(cmap.get(`${fid}|${gid}`)) : j === i ? '—' : '')), ''];
-  }).filter(Boolean);
-  return { head, body, omega, corr };
-}
-
 // ----------------------------------------------------------------------------
 // Word clipboard (HTML)
 // ----------------------------------------------------------------------------
-function buildWordHtml(models, { factorLabels = {} } = {}) {
+export function buildWordHtml(models, { factorLabels = {} } = {}) {
   const { longiEsem, longiCfa, longiBesem, multi, single } = splitGroups(models);
   const longiKinds = [longiEsem, longiCfa, longiBesem].filter((x) => x.length).length;
   const lbl = (p, fid) => (factorLabels[fid] || fid);
   const TBL = 'border-collapse:collapse;font-family:Calibri,sans-serif;font-size:11pt;margin:6pt 0;';
   const top = 'border-top:1.5pt solid #000;', bot = 'border-bottom:1.5pt solid #000;', hbot = 'border-bottom:0.75pt solid #000;';
-  const cell = (t, { b = false, l = false } = {}) => `<td style="padding:3pt 8pt;text-align:${l ? 'left' : 'right'};${b ? 'font-weight:bold;' : ''}">${t}</td>`;
+  const cell = (t, { b = false, ital = false, l = false, thin = false, heavy = false } = {}) => `<td style="padding:3pt 8pt;text-align:${l ? 'left' : 'right'};${b ? 'font-weight:bold;' : ''}${ital ? 'font-style:italic;' : ''}${thin ? hbot : ''}${heavy ? bot : ''}">${t}</td>`;
   const simpleTable = (title, head, body, note) => {
     let h = `<p style="font-style:italic;margin:2pt 0">${title}</p><table style="${TBL}"><tr>${head.map((x, i) => `<th style="padding:3pt 8pt;text-align:${i ? 'right' : 'left'};${top}${hbot}">${x}</th>`).join('')}</tr>`;
     body.forEach((r, ri) => { h += `<tr>${r.map((c, i) => `<td style="padding:3pt 8pt;text-align:${i ? 'right' : 'left'};${ri === body.length - 1 ? bot : ''}">${c}</td>`).join('')}</tr>`; });
@@ -131,16 +110,28 @@ function buildWordHtml(models, { factorLabels = {} } = {}) {
   let fit = '';
   if (single.length) { const fr = fitRows(single); fit = simpleTable('Table. Goodness-of-fit statistics', fr.head, fr.body, `N = ${single[0]?.parsed.nObs ?? '—'}. Δχ²(s) = Satorra–Bentler scaled difference (MLR). * p &lt; .05.`); }
 
-  // loadings tables (single-group only)
+  // loadings tables (single-group only) — Morin Table-2 blocks via the shared model; rule rows
+  // are skipped in print: each ω row's thin underline is the block separator, and the last
+  // physical row (last corr row, else the last ω row) carries the heavy closing border.
   let loads = '';
   for (const m of single) {
-    const p = m.parsed, lr = loadingRows(p, null);
-    const head = ['Item', ...p.factorOrder.map((fid) => lbl(p, fid)), 'δ'];
+    const p = m.parsed, model = buildLoadingsModel(p);
+    const head = ['Item', ...model.factors.map((fid) => lbl(p, fid)), 'δ'];
     loads += `<p style="font-style:italic;margin:10pt 0 2pt">Table. Standardized factor loadings — ${m.label}</p><table style="${TBL}"><tr>${head.map((h, i) => `<th style="padding:3pt 8pt;text-align:${i ? 'right' : 'left'};${top}${hbot}">${h}</th>`).join('')}</tr>`;
-    lr.body.forEach((row) => { loads += `<tr>${row.cells.map((c, i) => cell(c, { b: row.bold[i], l: i === 0 })).join('')}</tr>`; });
-    loads += `<tr>${lr.omega.map((c, i) => `<td style="padding:3pt 8pt;text-align:${i ? 'right' : 'left'};border-top:0.75pt solid #000">${c}</td>`).join('')}</tr>`;
-    lr.corr.forEach((row) => { loads += `<tr>${row.map((c, i) => cell(i === 0 ? lbl(p, c) : c, { l: i === 0 })).join('')}</tr>`; });
-    loads += `</table><p style="font-size:9pt;margin:2pt 0 6pt"><i>Note.</i> Target loadings in <b>bold</b>; δ = uniqueness; ω = composite reliability.</p>`;
+    const omegas = model.rows.filter((r) => r.kind === 'omega');
+    for (const r of model.rows) {
+      if (r.kind === 'rule') continue;
+      const heavy = r.kind === 'omega' && r === omegas[omegas.length - 1] && !model.anyCorr;
+      const thin = r.kind === 'omega' && !heavy;
+      loads += `<tr>${r.cells.map((c, i) => cell(c.t, { b: !!c.bold, ital: !!c.italic, l: i === 0, thin, heavy })).join('')}</tr>`;
+    }
+    if (model.anyCorr) {
+      loads += `<tr><td colspan="${head.length}" style="padding:3pt 8pt;text-align:left;font-style:italic">Factor correlations</td></tr>`;
+      model.corr.forEach((r, ri) => {
+        loads += `<tr>${[{ t: lbl(p, r.fid) }, ...r.cells].map((c, i) => cell(c.t, { l: i === 0, heavy: ri === model.corr.length - 1 })).join('')}</tr>`;
+      });
+    }
+    loads += `</table><p style="font-size:9pt;margin:2pt 0 6pt"><i>Note.</i> ${loadingsNote(p, model)}</p>`;
   }
 
   const proseParts = [...invProseText(longiEsem, { longitudinal: true }), ...invProseText(longiCfa, { longitudinal: true }), ...invProseText(longiBesem, { longitudinal: true }), ...proseText(single), ...invProseText(multi)];
@@ -200,10 +191,10 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
   const NONE = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
   const LINE = (sz) => ({ style: BorderStyle.SINGLE, size: sz, color: '000000' });
 
-  const tc = (text, { bold = false, align = 'right', topB = false, botB = false } = {}) => new TableCell({
-    borders: { top: topB ? LINE(12) : NONE, bottom: botB ? LINE(12) : NONE, left: NONE, right: NONE },
+  const tc = (text, { bold = false, italics = false, align = 'right', topB = false, botB = false, botThin = false } = {}) => new TableCell({
+    borders: { top: topB ? LINE(12) : NONE, bottom: botB ? LINE(12) : botThin ? LINE(6) : NONE, left: NONE, right: NONE },
     margins: { top: 30, bottom: 30, left: 90, right: 90 },
-    children: [new Paragraph({ alignment: align === 'left' ? AlignmentType.LEFT : AlignmentType.RIGHT, children: [new TextRun({ text: String(text), bold, font: 'Calibri', size: 20 })] })],
+    children: [new Paragraph({ alignment: align === 'left' ? AlignmentType.LEFT : AlignmentType.RIGHT, children: [new TextRun({ text: String(text), bold, italics, font: 'Calibri', size: 20 })] })],
   });
   const headCell = (text, align) => new TableCell({
     borders: { top: LINE(12), bottom: LINE(6), left: NONE, right: NONE },
@@ -240,16 +231,28 @@ export async function buildDocxBlob(models, { factorLabels = {} } = {}) {
   // fit table (single-group)
   if (single.length) blocks.push(italic('Table. Goodness-of-fit statistics'), mkTable(fitRows(single)), note(`Note. N = ${single[0]?.parsed.nObs ?? '—'}. Δχ²(s) = Satorra–Bentler scaled difference (MLR). * p < .05.`));
 
-  // loadings tables (single-group)
+  // loadings tables (single-group) — same Morin layout as the Word-HTML path (shared model):
+  // rule rows skipped, ω rows thin-underlined, heavy border on the last physical row.
   for (const m of single) {
-    const p = m.parsed, lr = loadingRows(p, null);
-    const head = ['Item', ...p.factorOrder.map((fid) => factorLabels[fid] || fid), 'δ'];
+    const p = m.parsed, model = buildLoadingsModel(p);
+    const head = ['Item', ...model.factors.map((fid) => factorLabels[fid] || fid), 'δ'];
     const hRow = new TableRow({ children: head.map((h, i) => headCell(h, i ? 'right' : 'left')) });
-    const rows = lr.body.map((row) => new TableRow({ children: row.cells.map((c, i) => tc(c, { bold: row.bold[i], align: i ? 'right' : 'left' })) }));
-    const omegaRow = new TableRow({ children: lr.omega.map((c, i) => tc(c, { align: i ? 'right' : 'left', topB: i === 0 || true })) });
-    const corrRows = lr.corr.map((row) => new TableRow({ children: row.map((c, i) => tc(c, { align: i ? 'right' : 'left' })) }));
-    // bottom rule on last corr row (or omega row if no corr)
-    blocks.push(italic(`Table. Standardized factor loadings — ${m.label}`), tbl([hRow, ...rows, omegaRow, ...corrRows]), note('Note. Target loadings in bold; δ = uniqueness; ω = composite reliability.'));
+    const omegas = model.rows.filter((r) => r.kind === 'omega');
+    const rows = [];
+    for (const r of model.rows) {
+      if (r.kind === 'rule') continue;
+      const heavy = r.kind === 'omega' && r === omegas[omegas.length - 1] && !model.anyCorr;
+      const thin = r.kind === 'omega' && !heavy;
+      rows.push(new TableRow({ children: r.cells.map((c, i) => tc(c.t, { bold: !!c.bold, italics: !!c.italic, align: i ? 'right' : 'left', botB: heavy, botThin: thin })) }));
+    }
+    if (model.anyCorr) {
+      // no columnSpan (CDN docx version compatibility unverified): italic title in cell 1, rest empty
+      rows.push(new TableRow({ children: head.map((_, i) => tc(i === 0 ? 'Factor correlations' : '', { italics: i === 0, align: 'left' })) }));
+      model.corr.forEach((r, ri) => {
+        rows.push(new TableRow({ children: [{ t: factorLabels[r.fid] || r.fid }, ...r.cells].map((c, i) => tc(c.t, { align: i ? 'right' : 'left', botB: ri === model.corr.length - 1 })) }));
+      });
+    }
+    blocks.push(italic(`Table. Standardized factor loadings — ${m.label}`), tbl([hRow, ...rows]), note(`Note. ${loadingsNote(p, model)}`));
   }
 
   blocks.push(new Paragraph({ children: [new TextRun({ text: 'Suggested text', bold: true, font: 'Calibri', size: 24 })], spacing: { before: 200, after: 80 } }));

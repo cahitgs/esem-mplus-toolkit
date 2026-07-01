@@ -26,6 +26,9 @@ export function createModelSpec(data) {
       invariance: { sequence: ['configural', 'metric', 'scalar', 'strict', 'varcov', 'latentmean'] },
     },
     output: { line: 'SAMPSTAT STANDARDIZED RESIDUAL CINTERVAL MODINDICES (3.0) TECH2 TECH4' },
+    // Convergence aids (Morin, Hoyle Handbook ch. 27): loosened convergence criterion (his T32
+    // remedy) + per-item residual-variance positivity constraints (his footnote-5 Heywood remedy).
+    aids: { convergence: false, convergenceValue: 0.005, positiveResiduals: [] },
   };
   setFactorCount(spec, 2);
   return spec;
@@ -128,6 +131,13 @@ export function validateSpec(spec) {
     if ((spec.groups.codes?.length || 0) < 2) errors.push('The grouping variable needs at least two groups.');
     if ((spec.groups.invariance.sequence?.length || 0) === 0) errors.push('Select at least one invariance step (start with Configural).');
     if (spec.data.categorical.length) warnings.push('Categorical invariance constrains thresholds rather than intercepts; review the generated syntax before use.');
+  }
+
+  if (spec.aids?.positiveResiduals?.length && (spec.groups.enabled || spec.longitudinal?.enabled)) {
+    warnings.push('Residual-variance constraints (res > 0) apply to single-group measurement models only — invariance sequences are generated without them.');
+  }
+  if (spec.aids?.positiveResiduals?.some((it) => spec.data.categorical.includes(it))) {
+    warnings.push('Residual-variance constraints are skipped for categorical items — their residual variance is not a free parameter under the default (DELTA) parameterization.');
   }
 
   if (spec.longitudinal?.enabled) {
