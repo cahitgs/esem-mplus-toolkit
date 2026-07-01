@@ -231,8 +231,24 @@ export function parseOut(text) {
       : (res.rSquare[it] != null ? 1 - res.rSquare[it] : null);
   }
 
-  // ---- primary factor per item (dominant loading) ----
+  // ---- a-priori target pattern from the echoed INPUT (Morin's subscale blocks) ----
+  // The .out echoes the input; the MODEL section's BY statements carry the intended pattern
+  // (mains = items without "~0"). Dominant-loading assignment misplaces items whose specific
+  // loading collapses (e.g. Morin Table 2: Z1's S-loading is .081 while a cross is .166), so
+  // block membership and ω must follow the a-priori pattern whenever it is recoverable.
+  // A Geomin range statement ("F1-F3 BY <all items>") is uninformative → dominant fallback.
+  res.targetPattern = extractTargetPattern(lines, res);
+
+  // ---- primary factor per item (a-priori pattern, else dominant loading) ----
+  const patternPick = (it, cands) => {
+    if (!res.targetPattern) return null;
+    const hit = cands.filter((f) => res.targetPattern[f]?.has(it));
+    hit.sort((a, b) => res.targetPattern[a].size - res.targetPattern[b].size); // most specific first (G lists all items)
+    return hit[0] || null;
+  };
   for (const it of res.items) {
+    const pat = patternPick(it, res.factorOrder);
+    if (pat) { res.primaryFactor[it] = pat; continue; }
     let best = null, bestF = null;
     for (const f of res.factorOrder) { const v = res.loadings[f]?.[it]?.est; if (v != null && (best == null || Math.abs(v) > Math.abs(best))) { best = v; bestF = f; } }
     res.primaryFactor[it] = bestF;
@@ -245,10 +261,15 @@ export function parseOut(text) {
   // generated bifactor models name it G).
   const substantial = (f, it) => { const v = res.loadings[f]?.[it]?.est; return v != null && Math.abs(v) >= 0.2; };
   const loadsAll = (f) => res.items.every((it) => substantial(f, it));
+  // A factor NAMED G/GF with an estimate on every item is the general factor even when some of
+  // its loadings are small (bifactor solutions legitimately have G-loadings < .2 — e.g. Morin's
+  // published Table 2 has G-λ = .116); the ≥.2 heuristic is kept only for other factor names.
+  const hasAll = (f) => res.items.every((it) => res.loadings[f]?.[it]?.est != null);
   const isOrthogonal = res.factorCorr.length === 0 || res.factorCorr.every((c) => Math.abs(c.est) < 0.05);
   res.generalFactor = null;
   if (res.factorOrder.length >= 2 && res.items.length >= 4) {
-    let g = res.factorOrder.find((f) => f === 'G' && loadsAll(f));
+    let g = res.factorOrder.find((f) => /^GF?$/i.test(f) && hasAll(f));
+    if (!g) g = res.factorOrder.find((f) => f === 'G' && loadsAll(f));
     if (!g && isOrthogonal) g = res.factorOrder.find((f) => loadsAll(f)) || null;
     if (g) { const others = res.factorOrder.filter((f) => f !== g); if (others.length && others.every((f) => !loadsAll(f))) res.generalFactor = g; }
   }
@@ -264,7 +285,9 @@ export function parseOut(text) {
   if (res.generalFactor) {
     const g = res.generalFactor, specifics = res.factorOrder.filter((f) => f !== g);
     res.omega[g] = omegaOver(res.items, g);                       // ω over all items for the general factor
-    for (const it of res.items) {                                 // assign each item to its dominant specific factor
+    for (const it of res.items) {                                 // a-priori subscale if recoverable, else dominant
+      const pat = patternPick(it, specifics);
+      if (pat) { res.specificFactor[it] = pat; continue; }
       let best = null, bf = null;
       for (const f of specifics) { const v = res.loadings[f]?.[it]?.est; if (v != null && (best == null || Math.abs(v) > Math.abs(best))) { best = v; bf = f; } }
       res.specificFactor[it] = bf;
@@ -275,6 +298,55 @@ export function parseOut(text) {
   }
 
   return res;
+}
+
+/** Recover the a-priori target pattern (factor → Set of MAIN items) from the echoed input.
+ *  Reads the first MODEL: block inside INPUT INSTRUCTIONS; a BY statement's mains are the items
+ *  listed without "~0" (flags/labels in parentheses and * / @value suffixes are stripped).
+ *  Handles factor lists and numeric ranges before BY ("G F1-F3 BY ..."). Returns null when no
+ *  informative pattern exists — e.g. a Geomin range statement listing every item as a main for
+ *  every factor. Names are uppercased to match the STDYX sections. */
+function extractTargetPattern(lines, res) {
+  const start = lines.findIndex((l) => /^\s*INPUT INSTRUCTIONS\s*$/.test(l));
+  if (start < 0) return null;
+  let end = lines.findIndex((l, i) => i > start && /^\s*(INPUT READING TERMINATED|\*\*\* WARNING|\*\*\* ERROR)/.test(l));
+  if (end < 0) end = Math.min(lines.length, start + 600);
+  const block = lines.slice(start + 1, end);
+  const mi = block.findIndex((l) => /^\s*MODEL:?\s*$/i.test(l));
+  if (mi < 0) return null;
+  let stop = block.findIndex((l, i) => i > mi && /^\s*(MODEL\s+[\w]+:|OUTPUT:|SAVEDATA:|MODEL\s+CONSTRAINT:|PLOT:|DEFINE:)/i.test(l));
+  if (stop < 0) stop = block.length;
+  const model = block.slice(mi + 1, stop).join(' ');
+  const itemSet = new Set(res.items);
+  const pattern = {};
+  for (const st of model.split(';')) {
+    const m = st.match(/^\s*([A-Za-z_][\w\s-]*?)\s+BY\s+(.+)$/i);
+    if (!m) continue;
+    // expand the factor list (ids and numeric ranges) before BY
+    const fids = [];
+    for (const tok of m[1].trim().split(/\s+/)) {
+      const r = tok.match(/^([A-Za-z_]\w*?)(\d+)\s*-\s*([A-Za-z_]\w*?)(\d+)$/);
+      if (r && r[1].toUpperCase() === r[3].toUpperCase()) {
+        for (let k = Number(r[2]); k <= Number(r[4]); k++) fids.push(`${r[1].toUpperCase()}${k}`);
+      } else if (/^[A-Za-z_]\w*$/.test(tok)) fids.push(tok.toUpperCase());
+    }
+    if (!fids.length || !fids.every((f) => res.factorOrder.includes(f))) continue;
+    // mains: items without ~0 (strip parenthesized flags first, then * / @value suffixes)
+    const rhs = m[2].replace(/\([^)]*\)/g, ' ');
+    for (const tok of rhs.trim().split(/\s+/)) {
+      if (/~0$/.test(tok)) continue;
+      const nm = tok.match(/^([A-Za-z_]\w*)/);
+      if (!nm) continue;
+      const item = nm[1].toUpperCase();
+      if (!itemSet.has(item)) continue;
+      for (const f of fids) { (pattern[f] = pattern[f] || new Set()).add(item); }
+    }
+  }
+  const covered = Object.keys(pattern);
+  if (covered.length < 2) return null;
+  // uninformative when every covered factor lists every item as a main (Geomin range statement)
+  if (covered.every((f) => pattern[f].size === res.items.length)) return null;
+  return pattern;
 }
 
 /** Convenience for tests / debugging. */

@@ -148,6 +148,9 @@ export function renderInvarianceProse(models, { longitudinal = false } = {}) {
 }
 
 // ======================= Loadings table =======================
+// Morin (Hoyle Handbook, ch. 27) Table-2 layout: items grouped into subscale blocks (one per
+// specific/primary factor), each block closed by its ω row; main loadings bold, non-significant
+// loadings (p ≥ .05) italic; the G-factor's ω rides on the last block's ω row.
 export function renderLoadingsTable(parsed, { targetMatrix = null, factorLabels = {}, caption = 'Standardized factor loadings (STDYX)' } = {}) {
   const factors = parsed.factorOrder;
   const lbl = (fid) => factorLabels[fid] || fid;
@@ -156,25 +159,47 @@ export function renderLoadingsTable(parsed, { targetMatrix = null, factorLabels 
     if (parsed.generalFactor) return fid === parsed.generalFactor || parsed.specificFactor[item] === fid;
     return parsed.primaryFactor[item] === fid;
   };
+  // the factor whose subscale block an item belongs to (never the general factor)
+  const blockOf = (item) => {
+    if (targetMatrix) { const hit = factors.find((fid) => fid !== parsed.generalFactor && targetMatrix[item]?.[fid]); if (hit) return hit; }
+    return parsed.generalFactor ? parsed.specificFactor[item] : parsed.primaryFactor[item];
+  };
+  const blockFactors = factors.filter((fid) => fid !== parsed.generalFactor);
+  const blocks = blockFactors.map((fid) => ({ fid, items: parsed.items.filter((it) => blockOf(it) === fid) })).filter((b) => b.items.length);
+  const leftovers = parsed.items.filter((it) => !blocks.some((b) => b.items.includes(it)));
+  if (leftovers.length) blocks.push({ fid: null, items: leftovers });
 
   const head = ['Item', ...factors.map(lbl), 'δ'];
   let body = '';
-  for (const it of parsed.items) {
-    const cells = [`<td>${it}</td>`];
-    for (const fid of factors) {
-      const v = parsed.loadings[fid]?.[it]?.est;
-      const cls = isTarget(it, fid) ? 'target' : 'crossload';
-      cells.push(`<td class="${cls}">${f3(v)}</td>`);
+  let anyNonSig = false;
+  blocks.forEach((blk, bi) => {
+    if (bi > 0) body += `<tr class="grp-rule"><td colspan="${head.length}"></td></tr>`;
+    for (const it of blk.items) {
+      const cells = [`<td>${it}</td>`];
+      for (const fid of factors) {
+        const L = parsed.loadings[fid]?.[it];
+        const cls = isTarget(it, fid) ? 'target' : 'crossload';
+        const nonSig = L?.p != null && L.p >= 0.05;
+        if (nonSig) anyNonSig = true;
+        cells.push(`<td class="${cls}">${nonSig ? `<i>${f3(L?.est)}</i>` : f3(L?.est)}</td>`);
+      }
+      cells.push(`<td>${f3(parsed.uniqueness[it])}</td>`);
+      body += `<tr>${cells.join('')}</tr>`;
     }
-    cells.push(`<td>${f3(parsed.uniqueness[it])}</td>`);
-    body += `<tr>${cells.join('')}</tr>`;
-  }
-  // ω row
-  let omegaRow = `<tr class="grp-rule"><td colspan="${head.length}"></td></tr><tr><td>ω</td>`;
-  for (const fid of factors) omegaRow += `<td>${f3(parsed.omega[fid])}</td>`;
-  omegaRow += '<td></td></tr>';
+    // block ω row: the block factor's ω under its own column; G's ω on the last block's row
+    const last = bi === blocks.length - 1;
+    let om = '<tr><td>ω</td>';
+    for (const fid of factors) {
+      const show = fid === blk.fid || (last && parsed.generalFactor && fid === parsed.generalFactor);
+      om += `<td>${show ? f3(parsed.omega[fid]) : ''}</td>`;
+    }
+    om += '<td></td></tr>';
+    body += om;
+  });
 
-  // factor-correlation lower triangle, aligned under the factor columns
+  // factor-correlation lower triangle, aligned under the factor columns; omitted when the
+  // solution is orthogonal (all correlations fixed at 0 — e.g. bifactor models)
+  const anyCorr = parsed.factorCorr.some((c) => c.est != null && Math.abs(c.est) >= 0.0005);
   const corr = corrLookup(parsed);
   let corrRows = '';
   factors.forEach((fid, i) => {
@@ -190,10 +215,10 @@ export function renderLoadingsTable(parsed, { targetMatrix = null, factorLabels 
   });
   const corrHeader = `<tr class="grp-rule"><td colspan="${head.length}"></td></tr><tr><td colspan="${head.length}" style="text-align:left;font-style:italic">Factor correlations</td></tr>`;
 
-  const note = `<p class="apa-note"><i>Note.</i> Target (primary) loadings in <b>bold</b>; cross-loadings in grey. δ = uniqueness (1 − R²); ω = McDonald's composite reliability.</p>`;
+  const note = `<p class="apa-note"><i>Note.</i> Target (primary) loadings in <b>bold</b>; cross-loadings in grey${anyNonSig ? '; non-significant loadings (<i>p</i> ≥ .05) in <i>italics</i>' : ''}. δ = uniqueness (1 − R²); ω = McDonald's composite reliability (per subscale block${parsed.generalFactor ? '; the general factor’s ω is shown on the last block' : ''}).</p>`;
   return `<table class="apa-table"><caption><b>Table.</b> ${caption}</caption>`
     + `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead>`
-    + `<tbody>${body}${omegaRow}${corrHeader}${corrRows}</tbody></table>${note}`;
+    + `<tbody>${body}${anyCorr ? corrHeader + corrRows : ''}</tbody></table>${note}`;
 }
 
 function corrLookup(parsed) {

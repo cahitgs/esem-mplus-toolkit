@@ -93,7 +93,8 @@ back through Mplus 8.3 to confirm it reproduces the intended models (matching de
 node test/parser.test.mjs       # .out parser             (57)
 node test/dataparse.test.mjs    # data-file detection     (9)
 node test/ewc.test.mjs          # ESEM-within-CFA         (32)
-node test/longitudinal.test.mjs # longitudinal invariance (65)
+node test/longitudinal.test.mjs # longitudinal invariance (67)
+node test/apa.test.mjs          # Morin-style APA tables   (16)
 ```
 
 ---

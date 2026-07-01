@@ -341,7 +341,9 @@ function renderResultsOutput() {
     const fitCard = el('div', { class: 'surface p-6 mb-6 apa' });
     fitCard.innerHTML = renderFitTable(single, { deltaMode: single.length > 1 ? 'consecutive' : 'none' });
     out.append(fitCard);
-    for (const m of single) {
+    // per-model cards: first-order models (CFA/ESEM) above bifactor models (stable within groups)
+    const ordered = [...single].sort((a, b) => (a.parsed.generalFactor ? 1 : 0) - (b.parsed.generalFactor ? 1 : 0));
+    for (const m of ordered) {
       const card = el('div', { class: 'surface p-6 mb-6 apa' });
       card.innerHTML = `<div class="eyebrow mb-3" style="font-family:var(--font-mono)">${escapeHtml(m.label)}</div>` + renderLoadingsTable(m.parsed, { factorLabels: factorLabelsFor(m.parsed) });
       out.append(card);
