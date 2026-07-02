@@ -9,6 +9,7 @@ import { parseOut } from './out-parser.js';
 import { parseSvalues, suggestReferents, buildEwcInp, fixedCrossCount } from './ewc.js';
 import { renderFitTable, renderLoadingsTable, renderProse, renderInvarianceTable, renderInvarianceProse } from './apa-render.js';
 import { copyResultsToWord, exportDocx, zipInputs, buildDocxBlob, buildZipBlob } from './docx-export.js';
+import { renderAutoRunCard } from './autorun-ui.js';
 
 const STEPS = ['data', 'model', 'syntax', 'results'];
 const appState = { step: 'data', reached: { data: true }, data: null, spec: null, parsed: [] };
@@ -188,6 +189,22 @@ function renderSyntaxStep() {
   card.append(tabsRow, pre);
   host.append(card);
 
+  // Auto mode (working folder): write the .inp set + data + RUN-ALL scripts into a local
+  // folder and import the .out files here as Mplus finishes them (Chromium desktop only).
+  renderAutoRunCard(host, {
+    models,
+    buildFiles: () => {
+      const files = models.map((m) => ({ name: m.file, text: buildInp(spec, m.key) }));
+      if (hasData) files.push({ name: datName, text: buildDat(data) });
+      return files;
+    },
+    onOutText: (name, text) => {
+      try { importOutText(text, name); renderResultsOutput(); }
+      catch (err) { toast(`${name}: ${err.message}`, 'err'); }
+    },
+    openResults: () => { unlock('results'); renderResultsStep(); },
+  });
+
   // Convergence aids (Morin, Hoyle ch. 27): loosened CONVERGENCE + residual positivity constraints.
   const aids = spec.aids || (spec.aids = { convergence: false, convergenceValue: 0.005, positiveResiduals: [] });
   const invOn = spec.groups.enabled || spec.longitudinal?.enabled;
@@ -288,16 +305,17 @@ function renderResultsStep() {
   renderResultsOutput();
 }
 
+// Single import path shared by the Results dropzone and the auto-mode folder watcher.
+function importOutText(text, fileName) {
+  const p = parseOut(text);
+  appState.parsed.push({ label: deriveLabel(p, fileName), parsed: p, fileName, raw: text });
+  if (!p.converged) toast(`${fileName}: model may not have converged`, 'err');
+}
+
 async function addOutFiles(fileList) {
-  const files = Array.from(fileList || []);
-  for (const f of files) {
-    try {
-      const text = await f.text();
-      const p = parseOut(text);
-      const label = deriveLabel(p, f.name);
-      appState.parsed.push({ label, parsed: p, fileName: f.name, raw: text });
-      if (!p.converged) toast(`${f.name}: model may not have converged`, 'err');
-    } catch (err) { toast(`${f.name}: ${err.message}`, 'err'); }
+  for (const f of Array.from(fileList || [])) {
+    try { importOutText(await f.text(), f.name); }
+    catch (err) { toast(`${f.name}: ${err.message}`, 'err'); }
   }
   renderResultsOutput();
 }

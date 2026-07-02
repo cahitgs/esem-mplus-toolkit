@@ -349,3 +349,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing:
   body { background: #fff; }
   body::before, .no-print { display: none !important; }
 }
+
+/* ---- auto mode (working folder) status dots — animate opacity/transform only ---- */
+.run-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; background: var(--line-strong); }
+.run-dot.running { background: var(--ochre); animation: runPulse 1.2s ease-in-out infinite; }
+.run-dot.imported { background: var(--petrol); }
+.run-dot.failed { background: var(--danger); }
+@keyframes runPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.8); } }
