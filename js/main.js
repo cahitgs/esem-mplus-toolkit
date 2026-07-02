@@ -615,6 +615,13 @@ const DEMO_SETS = {
   bifactor: ['5_Bifactor_ESEM.out'],
   ewc: ['2_ESEM_geomin.out'],
   invariance: ['inv_1_configural.out', 'inv_2_metric.out', 'inv_3_scalar.out', 'inv_4_strict.out', 'inv_5_varcov.out', 'inv_6_latentmean.out'],
+  // 2-wave (12 items × 2) well-being example: ESEM + bifactor-ESEM longitudinal sequences.
+  longitudinal: [
+    'LongInv_esem_1_configural.out', 'LongInv_esem_2_metric.out', 'LongInv_esem_3_scalar.out',
+    'LongInv_esem_4_strict.out', 'LongInv_esem_5_varcov.out', 'LongInv_esem_6_latentmean.out',
+    'LongInv_besem_1_configural.out', 'LongInv_besem_2_metric.out', 'LongInv_besem_3_scalar.out',
+    'LongInv_besem_4_strict.out', 'LongInv_besem_5_varcov.out', 'LongInv_besem_6_latentmean.out',
+  ],
 };
 async function demoBootstrap(which) {
   // Model / Syntax: rebuild the 3-factor example spec from the bundled data file so the
