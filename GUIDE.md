@@ -41,7 +41,7 @@ constraints to identify the rotation, or if a factor has no main items.
 The app writes exact Mplus `.inp` for each requested model. Download a single file or a `.zip` of all of
 them; lines are wrapped to stay under Mplus's 90-character limit.
 
-![Generated syntax](docs/img/03-syntax.png?v=5)
+![Generated syntax](docs/img/03-syntax.png?v=6)
 
 A few load-bearing conventions, matched to Swami/Maïano/Morin (2023):
 

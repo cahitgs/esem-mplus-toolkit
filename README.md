@@ -27,8 +27,8 @@ in body image research_, _Body Image_ 47, 262–278.**
 |------|--------|--------------|
 | **1 · Data** | Upload a `.dat` / `.csv` | Auto-detect columns, delimiter, header; export an Mplus-ready `.dat` |
 | **2 · Model** | Sketch the factor model on a Λ grid | Pick factors, rotation (Geomin / Target), estimator, bifactor, grouping |
-| **3 · Syntax** | — | Generate exact `.inp` for each model; download one file or a `.zip` |
-| **4 · Results** | Drop your Mplus `.out` files | APA fit / loadings / bifactor / invariance tables + prose + path diagrams; copy to Word, `.docx` |
+| **3 · Syntax** | — | Generate exact `.inp` for each model; download one file, a `.zip`, or write them straight into a working folder (auto mode) |
+| **4 · Results** | Drop your Mplus `.out` files — or let auto mode import them | APA fit / loadings / bifactor / invariance tables + prose + path diagrams; copy to Word, `.docx` |
 
 ### Models supported
 
@@ -38,6 +38,7 @@ in body image research_, _Body Image_ 47, 262–278.**
 - **Measurement invariance** — across **groups** (multi-group) or across **time** (within-person, 2-wave longitudinal, for CFA, ESEM, and **bifactor-ESEM**): configural → metric → scalar → strict → variance–covariance → latent means (Satorra–Bentler scaled Δχ² for MLR; Chen 2007 ΔCFI/ΔRMSEA verdicts). Longitudinal models equate loadings across waves and correlate each indicator's residual over time; the bifactor sequence follows Morin's Hoyle-Handbook chapter (orthogonal target rotation, general + specific factors per wave).
 - **ESEM-within-CFA** — convert a rotated ESEM solution into an equivalent CFA you can embed in larger SEM/MIMIC/DIF models (Morin's referent method)
 - **Convergence aids** (optional, on the Syntax step) — the two remedies Morin uses in the Hoyle-Handbook chapter: a loosened `CONVERGENCE` criterion (emitted for every model, invariance sequences included) and per-item residual-variance positivity constraints (`item (res#); … MODEL CONSTRAINT: res# > 0;`, single-group measurement models only) for Heywood cases
+- **Auto mode** (optional, Chrome/Edge desktop) — pick a local working folder and the app writes every `.inp`, the Mplus-ready `.dat`, and a `RUN-ALL.bat` there; double-click that file once and the results import themselves as each model finishes. Nothing is uploaded — the folder, the bat, and Mplus are all on your machine.
 
 Standardized-loadings tables follow Morin's Table-2 layout — items grouped into subscale blocks with a per-block ω row, target loadings bold, non-significant loadings italic — identically in the browser, the copy-to-Word HTML, and the `.docx` export.
 
